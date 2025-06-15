@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import LobbyPage from './pages/LobbyPage';
+import GamePage from './pages/GamePage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -17,6 +18,15 @@ function App() {
           element={
             <ProtectedRoute>
               <LobbyPage />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/game/:roomId" 
+          element={
+            <ProtectedRoute>
+              <GamePage />
             </ProtectedRoute>
           } 
         />
