@@ -1,4 +1,5 @@
 import express from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDatabases, pgClient, redisClient } from './db';
@@ -6,10 +7,12 @@ import prisma from './prisma';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import roomRoutes from './routes/room';
+import { createSocketServer } from './socket/socketServer';
 
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
@@ -131,8 +134,14 @@ const startServer = async () => {
   try {
     await connectDatabases();
     
-    app.listen(PORT, () => {
+    // 初始化Socket.IO服务器
+    const io = createSocketServer(httpServer);
+    console.log('🔌 Socket.IO server initialized');
+    
+    httpServer.listen(PORT, () => {
       console.log(`🃏 Texas Poker Server running on port ${PORT}`);
+      console.log(`🌐 HTTP server: http://localhost:${PORT}`);
+      console.log(`⚡ WebSocket server: ws://localhost:${PORT}`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
