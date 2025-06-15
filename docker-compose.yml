@@ -1,4 +1,4 @@
-version: '3.8'
+# Docker Compose for Texas Poker Development Environment
 
 services:
   postgres:
@@ -43,6 +43,7 @@ services:
       - PORT=3001
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/texas_poker
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your_super_secret_jwt_key_for_development_12345
     depends_on:
       postgres:
         condition: service_healthy
