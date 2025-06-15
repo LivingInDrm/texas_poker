@@ -1,12 +1,34 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from './pages/LoginPage';
+import LobbyPage from './pages/LobbyPage';
+import ProtectedRoute from './components/ProtectedRoute';
+
 function App() {
   return (
-    <div className="min-h-screen bg-green-900 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-white mb-4">🃏 德州扑克</h1>
-        <p className="text-green-200">Hello World - 前端项目启动成功!</p>
-      </div>
-    </div>
-  )
+    <Router>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<LoginPage />} />
+        
+        {/* Protected routes */}
+        <Route 
+          path="/lobby" 
+          element={
+            <ProtectedRoute>
+              <LobbyPage />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* Default redirect */}
+        <Route path="/" element={<Navigate to="/lobby" replace />} />
+        
+        {/* Catch all - redirect to lobby */}
+        <Route path="*" element={<Navigate to="/lobby" replace />} />
+      </Routes>
+    </Router>
+  );
 }
 
-export default App
+export default App;
