@@ -10,7 +10,7 @@ vi.mock('socket.io-client', () => ({
 
 // Mock环境变量
 vi.mock('../../config/env', () => ({
-  BACKEND_URL: 'http://localhost:3000'
+  BACKEND_URL: 'http://localhost:3001'
 }));
 
 describe('SocketService', () => {
@@ -54,7 +54,7 @@ describe('SocketService', () => {
 
       const result = await socketService.connect(mockToken);
 
-      expect(io).toHaveBeenCalledWith('http://localhost:3000', expect.objectContaining({
+      expect(io).toHaveBeenCalledWith('http://localhost:3001', expect.objectContaining({
         autoConnect: false,
         auth: { token: mockToken }
       }));

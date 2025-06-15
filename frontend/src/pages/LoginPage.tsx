@@ -70,27 +70,27 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-green-900 flex items-center justify-center px-4">
-      <div className="max-w-md w-full space-y-8">
+      <div className="max-w-sm w-full space-y-6">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-white mb-2">🃏 德州扑克</h1>
-          <h2 className="text-2xl font-bold text-green-200">
+          <h1 className="text-3xl font-bold text-white mb-2">🃏 德州扑克</h1>
+          <h2 className="text-xl font-semibold text-green-200">
             {isLogin ? '登录' : '注册'}
           </h2>
-          <p className="mt-2 text-green-300">
+          <p className="mt-1 text-sm text-green-300">
             {isLogin ? '欢迎回到游戏' : '加入德州扑克'}
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+              <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">
                 {error}
               </div>
             )}
 
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">
                 用户名
               </label>
               <input
@@ -100,13 +100,13 @@ const LoginPage: React.FC = () => {
                 required
                 value={formData.username}
                 onChange={handleInputChange}
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+                className="appearance-none relative block w-full px-3 py-1.5 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
                 placeholder="请输入用户名"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
                 密码
               </label>
               <input
@@ -116,14 +116,14 @@ const LoginPage: React.FC = () => {
                 required
                 value={formData.password}
                 onChange={handleInputChange}
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+                className="appearance-none relative block w-full px-3 py-1.5 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
                 placeholder="请输入密码"
               />
             </div>
 
             {!isLogin && (
               <div>
-                <label htmlFor="avatar" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="avatar" className="block text-xs font-medium text-gray-700 mb-1">
                   头像链接 (可选)
                 </label>
                 <input
@@ -132,27 +132,27 @@ const LoginPage: React.FC = () => {
                   type="url"
                   value={formData.avatar}
                   onChange={handleInputChange}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+                  className="appearance-none relative block w-full px-3 py-1.5 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
                   placeholder="https://example.com/avatar.jpg"
                 />
               </div>
             )}
 
-            <div>
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={isLoading}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isLoading ? '处理中...' : (isLogin ? '登录' : '注册')}
               </button>
             </div>
 
-            <div className="text-center">
+            <div className="text-center pt-2">
               <button
                 type="button"
                 onClick={toggleMode}
-                className="text-green-600 hover:text-green-500 text-sm font-medium"
+                className="text-green-600 hover:text-green-500 text-xs font-medium transition-colors"
               >
                 {isLogin ? '没有账户？立即注册' : '已有账户？立即登录'}
               </button>

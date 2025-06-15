@@ -15,7 +15,7 @@ import {
 
 // Socket连接配置
 const SOCKET_CONFIG = {
-  url: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000',
+  url: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001',
   options: {
     autoConnect: false,
     reconnection: true,
