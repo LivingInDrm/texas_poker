@@ -16,9 +16,15 @@ const PokerCard: React.FC<PokerCardProps> = ({
   className = '' 
 }) => {
   const sizeClasses = {
-    small: 'w-8 h-12 text-xs',
-    medium: 'w-12 h-16 text-sm',
-    large: 'w-16 h-24 text-lg'
+    small: 'w-10 h-14 text-sm',
+    medium: 'w-12 h-16 text-lg',
+    large: 'w-16 h-24 text-xl'
+  };
+  
+  const centerSymbolSizes = {
+    small: 'text-lg',
+    medium: 'text-xl',
+    large: 'text-2xl'
   };
 
   const isRed = card.suit === Suit.HEARTS || card.suit === Suit.DIAMONDS;
@@ -40,20 +46,15 @@ const PokerCard: React.FC<PokerCardProps> = ({
     <div className={`
       ${sizeClasses[size]} 
       bg-white border border-gray-300 rounded-lg 
-      flex flex-col items-center justify-between p-1 shadow-sm
+      flex flex-col items-center justify-center p-1 shadow-sm
       ${isRed ? 'text-red-500' : 'text-black'}
       ${className}
     `}>
-      <div className="text-left self-start font-bold">
-        <div>{RANK_NAMES[card.rank]}</div>
-        <div>{SUIT_SYMBOLS[card.suit]}</div>
+      <div className={`font-bold text-center ${centerSymbolSizes[size]} mb-0.5`}>
+        {RANK_NAMES[card.rank]}
       </div>
-      <div className="text-center text-lg">
+      <div className={`text-center ${centerSymbolSizes[size]} mt-0.5`}>
         {SUIT_SYMBOLS[card.suit]}
-      </div>
-      <div className="text-right self-end font-bold rotate-180">
-        <div>{RANK_NAMES[card.rank]}</div>
-        <div>{SUIT_SYMBOLS[card.suit]}</div>
       </div>
     </div>
   );

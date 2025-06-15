@@ -135,7 +135,10 @@ export interface GameSnapshot {
   currentPlayerId: string | null;
   actionHistory: GameAction[];
   isHandInProgress: boolean;
-  positions: PlayerPosition[];
+  positions?: PlayerPosition[];
+  dealerIndex?: number;
+  smallBlindIndex?: number;
+  bigBlindIndex?: number;
 }
 
 /**

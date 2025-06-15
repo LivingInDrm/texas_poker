@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GameSnapshot, GamePhase, PHASE_NAMES, Card, PlayerAction } from '../types/game';
+import { GameSnapshot, GamePhase, PHASE_NAMES, Card, PlayerAction, PlayerPosition } from '../types/game';
 import PlayerSeat from './PlayerSeat';
 import { PokerCards } from './PokerCards';
 import PotDisplay from './PotDisplay';
@@ -50,8 +50,17 @@ const GameTable: React.FC<GameTableProps> = ({
     
     // 为每个玩家计算座位位置（椭圆形布局）
     const seats = players.map((player, index) => {
-      const position = gameSnapshot.positions.find(p => p.playerId === player.id);
-      if (!position) return null;
+      // 尝试从positions数组中找到位置信息
+      const position = gameSnapshot.positions?.find(p => p.playerId === player.id);
+      
+      // 如果没有位置信息，创建默认位置信息
+      const playerPosition: PlayerPosition = position || {
+        playerId: player.id,
+        seatIndex: index,
+        isDealer: index === (gameSnapshot.dealerIndex || 0),
+        isSmallBlind: index === (gameSnapshot.smallBlindIndex || 0),
+        isBigBlind: index === (gameSnapshot.bigBlindIndex || 1)
+      };
 
       // 计算座位角度（从底部中央开始，顺时针排列）
       const angle = (index / playerCount) * 2 * Math.PI - Math.PI / 2;
@@ -63,14 +72,14 @@ const GameTable: React.FC<GameTableProps> = ({
 
       return {
         player,
-        position,
+        position: playerPosition,
         style: {
           left: `${x}%`,
           top: `${y}%`,
           transform: 'translate(-50%, -50%)'
         }
       };
-    }).filter(Boolean);
+    });
 
     return seats;
   };
@@ -183,16 +192,16 @@ const GameTable: React.FC<GameTableProps> = ({
         {/* 玩家座位 */}
         {seats.map((seat) => (
           <div
-            key={seat!.player.id}
+            key={seat.player.id}
             className="absolute"
-            style={seat!.style}
+            style={seat.style}
           >
             <PlayerSeat
-              player={seat!.player}
-              position={seat!.position}
-              isCurrentPlayer={seat!.player.id === gameSnapshot.currentPlayerId}
-              showCards={seat!.player.id === currentUserId || gameSnapshot.phase === GamePhase.SHOWDOWN}
-              timeRemaining={seat!.player.id === gameSnapshot.currentPlayerId ? timeRemaining || undefined : undefined}
+              player={seat.player}
+              position={seat.position}
+              isCurrentPlayer={seat.player.id === gameSnapshot.currentPlayerId}
+              showCards={seat.player.id === currentUserId || gameSnapshot.phase === GamePhase.SHOWDOWN}
+              timeRemaining={seat.player.id === gameSnapshot.currentPlayerId ? timeRemaining || undefined : undefined}
               className="w-32"
             />
           </div>

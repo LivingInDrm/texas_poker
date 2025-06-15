@@ -297,9 +297,14 @@ function setupGameHandlers(socket, io) {
 // 将游戏引擎状态转换为WebSocket格式
 function convertGameEngineToWebSocketState(gameEngine, roomId) {
     const engineState = gameEngine.getState();
-    const positions = engineState.positions || {};
+    const positions = engineState.positions || [];
     const pots = engineState.pots || [];
     const totalPot = pots.reduce((sum, pot) => sum + pot.amount, 0);
+    
+    // 从positions数组中提取索引信息
+    const dealerPos = positions.find(p => p.isDealer);
+    const smallBlindPos = positions.find(p => p.isSmallBlind);
+    const bigBlindPos = positions.find(p => p.isBigBlind);
     
     return {
         phase: engineState.phase,
@@ -313,9 +318,10 @@ function convertGameEngineToWebSocketState(gameEngine, roomId) {
             totalBet: p.totalBet,
             isConnected: true // 这里假设所有玩家都连接，实际应该从房间状态获取
         })),
-        dealerIndex: positions.dealer || 0,
-        smallBlindIndex: positions.smallBlind || 0,
-        bigBlindIndex: positions.bigBlind || 0,
+        positions: positions,
+        dealerIndex: dealerPos ? dealerPos.seatIndex : 0,
+        smallBlindIndex: smallBlindPos ? smallBlindPos.seatIndex : 0,
+        bigBlindIndex: bigBlindPos ? bigBlindPos.seatIndex : 1,
         currentPlayerIndex: engineState.currentPlayerIndex || 0,
         board: (engineState.communityCards || []).map((card) => card.toString()),
         pot: totalPot,
