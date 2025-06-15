@@ -5,6 +5,7 @@ import { connectDatabases, pgClient, redisClient } from './db';
 import prisma from './prisma';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
+import roomRoutes from './routes/room';
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ app.use(express.json());
 // API 路由
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/room', roomRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {
