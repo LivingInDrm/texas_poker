@@ -1,0 +1,79 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  avatar       String?
+  chips        Int      @default(5000)
+  gamesPlayed  Int      @default(0) @map("games_played")
+  winRate      Float    @default(0.0) @map("win_rate")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // 关联房间
+  ownedRooms Room[] @relation("RoomOwner")
+  gameRecords GameRecord[]
+
+  @@map("users")
+}
+
+// 房间表
+model Room {
+  id          String     @id @default(uuid()) @db.Uuid
+  ownerId     String     @map("owner_id") @db.Uuid
+  playerLimit Int        @map("player_limit") @default(6)
+  password    String?
+  status      RoomStatus @default(WAITING)
+  bigBlind    Int        @default(20) @map("big_blind")
+  smallBlind  Int        @default(10) @map("small_blind")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // 关联
+  owner       User         @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  gameRecords GameRecord[]
+
+  @@map("rooms")
+}
+
+// 游戏记录表
+model GameRecord {
+  id        String   @id @default(uuid()) @db.Uuid
+  roomId    String   @map("room_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  chipsBefore Int    @map("chips_before")
+  chipsAfter  Int    @map("chips_after")
+  chipsChange Int    @map("chips_change")
+  handResult  String? @map("hand_result") // 牌型结果
+  isWinner    Boolean @default(false) @map("is_winner")
+  gameData    Json?   @map("game_data") // 存储完整游戏数据
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // 关联
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("game_records")
+}
+
+// 房间状态枚举
+enum RoomStatus {
+  WAITING  // 等待玩家
+  PLAYING  // 游戏中
+  ENDED    // 已结束
+}
