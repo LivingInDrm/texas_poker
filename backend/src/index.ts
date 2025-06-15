@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDatabases, pgClient, redisClient } from './db';
 import prisma from './prisma';
+import authRoutes from './routes/auth';
+import userRoutes from './routes/user';
 
 dotenv.config();
 
@@ -11,6 +13,10 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// API 路由
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {
