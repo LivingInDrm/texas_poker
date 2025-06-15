@@ -7,11 +7,36 @@ import { ResultModal } from '../components/ResultModal';
 import { WinnerAnimationSequence } from '../components/WinnerHighlight';
 import { AllHandsReveal } from '../components/HandReveal';
 import { SoundControl, GameSoundEffects, CelebrationEffects } from '../components/GameEffects';
+import { NetworkIndicator } from '../components/NetworkIndicator';
+import { ReconnectionHandler } from '../components/ReconnectionHandler';
+import { OfflinePlayerIndicator, PlayerStatusBadge } from '../components/OfflinePlayerIndicator';
 import { GameSnapshot, GamePhase, PlayerStatus, Suit, Rank, PlayerAction, GameResult } from '../types/game';
+import { useSocket } from '../hooks/useSocket';
+import { useUserStore } from '../stores/userStore';
+import { useGameStore } from '../stores/gameStore';
 
 const GamePage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
+  
+  // Store hooks
+  const { user } = useUserStore();
+  const { currentRoom, gameState, isInGame, getCurrentPlayer, getMyPlayer, canPlayerAct } = useGameStore();
+  
+  // Socket hooks
+  const {
+    connected,
+    connectionStatus,
+    networkQuality,
+    connect,
+    joinRoom,
+    leaveRoom,
+    makeGameAction,
+    setReady,
+    restartGame
+  } = useSocket();
+
+  // Local state
   const [gameSnapshot, setGameSnapshot] = useState<GameSnapshot | null>(null);
   const [gameResult, setGameResult] = useState<GameResult | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
@@ -19,438 +44,435 @@ const GamePage: React.FC = () => {
   const [showWinnerAnimation, setShowWinnerAnimation] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data for development/testing
+  // 初始化和房间加入
   useEffect(() => {
-    const mockGameSnapshot: GameSnapshot = {
-      gameId: roomId || 'test-room',
-      phase: GamePhase.FLOP,
-      players: [
-        {
-          id: 'user1',
-          name: 'Alice',
-          chips: 1500,
-          status: PlayerStatus.ACTIVE,
-          cards: [
-            { suit: Suit.SPADES, rank: Rank.ACE },
-            { suit: Suit.HEARTS, rank: Rank.KING }
-          ],
-          currentBet: 50,
-          totalBet: 70,
-          hasActed: true,
-          isReady: true,
-          lastAction: undefined
-        },
-        {
-          id: 'user2',
-          name: 'Bob',
-          chips: 2000,
-          status: PlayerStatus.ACTIVE,
-          cards: [
-            { suit: Suit.CLUBS, rank: Rank.QUEEN },
-            { suit: Suit.DIAMONDS, rank: Rank.JACK }
-          ],
-          currentBet: 50,
-          totalBet: 50,
-          hasActed: false,
-          isReady: true,
-          lastAction: undefined
-        },
-        {
-          id: 'user3',
-          name: 'Charlie',
-          chips: 800,
-          status: PlayerStatus.FOLDED,
-          cards: [],
-          currentBet: 0,
-          totalBet: 20,
-          hasActed: true,
-          isReady: true,
-          lastAction: 'fold' as any
-        }
-      ],
-      communityCards: [
-        { suit: Suit.SPADES, rank: Rank.TEN },
-        { suit: Suit.HEARTS, rank: Rank.NINE },
-        { suit: Suit.CLUBS, rank: Rank.EIGHT }
-      ],
-      pots: [
-        {
-          id: 'pot-1',
-          amount: 140,
-          type: 'main',
-          eligiblePlayers: ['user1', 'user2', 'user3']
-        }
-      ],
-      currentPlayerId: 'user1',
-      actionHistory: [
-        {
-          playerId: 'user1',
-          action: 'raise' as any,
-          amount: 50,
-          timestamp: Date.now() - 5000,
-          phase: GamePhase.PRE_FLOP
-        },
-        {
-          playerId: 'user3',
-          action: 'fold' as any,
-          amount: 0,
-          timestamp: Date.now() - 3000,
-          phase: GamePhase.PRE_FLOP
-        }
-      ],
-      isHandInProgress: true,
-      positions: [
-        {
-          playerId: 'user1',
-          seatIndex: 0,
-          isDealer: true,
-          isSmallBlind: false,
-          isBigBlind: false
-        },
-        {
-          playerId: 'user2',
-          seatIndex: 1,
-          isDealer: false,
-          isSmallBlind: true,
-          isBigBlind: false
-        },
-        {
-          playerId: 'user3',
-          seatIndex: 2,
-          isDealer: false,
-          isSmallBlind: false,
-          isBigBlind: true
-        }
-      ]
-    };
-
-    setGameSnapshot(mockGameSnapshot);
-  }, [roomId]);
-
-  const handlePlayerAction = (action: PlayerAction, amount?: number) => {
-    console.log('Player action:', action, amount);
-    // TODO: Implement WebSocket communication with backend
-    
-    // Mock action handling for testing
-    if (gameSnapshot && action) {
-      const updatedSnapshot = { ...gameSnapshot };
-      const currentPlayerIndex = updatedSnapshot.players.findIndex(p => p.id === 'user1');
-      
-      if (currentPlayerIndex !== -1) {
-        const player = updatedSnapshot.players[currentPlayerIndex];
-        
-        // Update player based on action
-        switch (action) {
-          case PlayerAction.FOLD:
-            player.status = PlayerStatus.FOLDED;
-            player.hasActed = true;
-            break;
-          case PlayerAction.CHECK:
-            player.hasActed = true;
-            break;
-          case PlayerAction.CALL: {
-            const callAmount = Math.max(...updatedSnapshot.players.map(p => p.currentBet)) - player.currentBet;
-            player.currentBet += callAmount;
-            player.chips -= callAmount;
-            player.hasActed = true;
-            break;
-          }
-          case PlayerAction.RAISE: {
-            if (amount) {
-              const raiseAmount = amount - player.currentBet;
-              player.currentBet = amount;
-              player.chips -= raiseAmount;
-              player.hasActed = true;
-            }
-            break;
-          }
-          case PlayerAction.ALL_IN:
-            player.currentBet += player.chips;
-            player.chips = 0;
-            player.status = PlayerStatus.ALL_IN;
-            player.hasActed = true;
-            break;
-        }
-        
-        player.lastAction = action;
-        
-        // Add to action history
-        updatedSnapshot.actionHistory.push({
-          playerId: 'user1',
-          action,
-          amount: amount || 0,
-          timestamp: Date.now(),
-          phase: updatedSnapshot.phase
-        });
-        
-        // Move to next player (simple mock logic)
-        const nextPlayerIndex = (currentPlayerIndex + 1) % updatedSnapshot.players.length;
-        updatedSnapshot.currentPlayerId = updatedSnapshot.players[nextPlayerIndex].id;
-        
-        setGameSnapshot(updatedSnapshot);
+    const initializeGame = async () => {
+      if (!roomId || !user) {
+        navigate('/lobby');
+        return;
       }
-    }
-  };
 
-  // Game result simulation for testing
-  const simulateGameEnd = () => {
-    if (!gameSnapshot) return;
-
-    const mockGameResult: GameResult = {
-      winners: [
-        {
-          playerId: 'user1',
-          hand: {
-            type: 'pair',
-            name: '一对K',
-            cards: [
-              { suit: Suit.SPADES, rank: Rank.ACE },
-              { suit: Suit.HEARTS, rank: Rank.KING },
-              { suit: Suit.SPADES, rank: Rank.TEN },
-              { suit: Suit.HEARTS, rank: Rank.NINE },
-              { suit: Suit.CLUBS, rank: Rank.EIGHT }
-            ],
-            rank: 2
-          },
-          winAmount: 140,
-          potIds: ['pot-1']
+      // 确保Socket连接
+      if (!connected) {
+        try {
+          await connect();
+        } catch (error) {
+          console.error('Failed to connect to socket:', error);
+          setError('无法连接到服务器');
+          return;
         }
-      ],
+      }
+
+      // 加入房间
+      if (!currentRoom || currentRoom.id !== roomId) {
+        setIsJoiningRoom(true);
+        try {
+          await joinRoom(roomId);
+        } catch (error: any) {
+          console.error('Failed to join room:', error);
+          setError(error.message || '加入房间失败');
+          navigate('/lobby');
+          return;
+        } finally {
+          setIsJoiningRoom(false);
+        }
+      }
+    };
+
+    initializeGame();
+  }, [roomId, user, connected, currentRoom, connect, joinRoom, navigate]);
+
+  // 将Socket游戏状态转换为本地GameSnapshot格式
+  useEffect(() => {
+    if (!gameState || !currentRoom) {
+      setGameSnapshot(null);
+      return;
+    }
+
+    // 转换游戏状态
+    const snapshot: GameSnapshot = {
+      gameId: gameState.gameId,
+      phase: convertSocketPhaseToLocal(gameState.phase),
+      players: gameState.players.map(player => ({
+        id: player.id,
+        name: player.username,
+        chips: player.chips,
+        status: convertSocketStatusToLocal(player.status),
+        cards: player.cards.map(cardStr => parseCard(cardStr)),
+        currentBet: gameState.roundBets[player.id] || 0,
+        totalBet: player.totalBet,
+        hasActed: true, // 这个需要根据实际逻辑判断
+        isReady: currentRoom.players.find(p => p.id === player.id)?.isReady || false,
+        lastAction: undefined // 从history中获取最后的action
+      })),
+      communityCards: gameState.board.map(cardStr => parseCard(cardStr)),
       pots: [
         {
-          id: 'pot-1',
-          amount: 140,
-          winnerIds: ['user1']
-        }
+          id: 'main-pot',
+          amount: gameState.pot,
+          type: 'main',
+          eligiblePlayers: gameState.players.map(p => p.id)
+        },
+        ...gameState.sidePots.map((sidePot, index) => ({
+          id: `side-pot-${index}`,
+          amount: sidePot.amount,
+          type: 'side' as const,
+          eligiblePlayers: sidePot.eligiblePlayers
+        }))
       ],
-      actions: gameSnapshot.actionHistory,
-      duration: 120000
+      currentPlayerId: gameState.players[gameState.currentPlayerIndex]?.id || null,
+      actionHistory: gameState.history.map(action => ({
+        playerId: action.playerId,
+        action: convertSocketActionToLocal(action.action.type),
+        amount: action.action.amount || 0,
+        timestamp: action.timestamp.getTime(),
+        phase: convertSocketPhaseToLocal(action.phase)
+      })),
+      isHandInProgress: gameState.phase !== 'ended',
+      positions: gameState.players.map((player, index) => ({
+        playerId: player.id,
+        seatIndex: player.position,
+        isDealer: index === gameState.dealerIndex,
+        isSmallBlind: index === gameState.smallBlindIndex,
+        isBigBlind: index === gameState.bigBlindIndex
+      }))
     };
 
-    setGameResult(mockGameResult);
-    
-    // Start the result sequence
-    setTimeout(() => setShowHandReveal(true), 1000);
-    setTimeout(() => setShowWinnerAnimation(true), 3000);
-    setTimeout(() => setShowCelebration(true), 4000);
-    setTimeout(() => setShowResultModal(true), 6000);
-  };
+    setGameSnapshot(snapshot);
+  }, [gameState, currentRoom]);
 
-  const handleNextGame = () => {
-    // Reset all result states
-    setGameResult(null);
-    setShowResultModal(false);
-    setShowHandReveal(false);
-    setShowWinnerAnimation(false);
-    setShowCelebration(false);
-    
-    // TODO: 向后端发送开始新游戏的请求
-    console.log('Starting new game...');
-    
-    // For now, just reset the game to pre-flop state
-    if (gameSnapshot) {
-      const newSnapshot = {
-        ...gameSnapshot,
-        phase: GamePhase.PRE_FLOP,
-        players: gameSnapshot.players.map(player => ({
-          ...player,
-          status: PlayerStatus.ACTIVE,
-          hasActed: false,
-          currentBet: 0,
-          lastAction: undefined,
-          cards: []
-        })),
-        communityCards: [],
-        actionHistory: [],
-        isHandInProgress: true
+  // 处理玩家行动
+  const handlePlayerAction = async (action: PlayerAction, amount?: number) => {
+    if (!user || !roomId || !canPlayerAct(user.id)) {
+      console.warn('Cannot perform action - user not found, no room, or not player turn');
+      return;
+    }
+
+    try {
+      const socketAction = {
+        type: convertLocalActionToSocket(action),
+        amount,
+        timestamp: new Date()
       };
-      setGameSnapshot(newSnapshot);
+
+      const response = await makeGameAction(socketAction);
+      
+      if (!response.success) {
+        setError(response.error || '操作失败');
+      }
+    } catch (error: any) {
+      console.error('Failed to make game action:', error);
+      setError(error.message || '操作失败');
     }
   };
 
-  const handleBackToLobby = () => {
-    navigate('/lobby');
+  // 处理准备状态
+  const handleReady = async () => {
+    if (!roomId) return;
+
+    try {
+      const response = await setReady();
+      if (!response.success) {
+        setError(response.error || '设置准备状态失败');
+      }
+    } catch (error: any) {
+      console.error('Failed to set ready:', error);
+      setError(error.message || '设置准备状态失败');
+    }
   };
 
-  const handleLeaveGame = () => {
-    navigate('/lobby');
+  // 处理重新开始游戏
+  const handleRestartGame = async () => {
+    if (!roomId) return;
+
+    try {
+      const response = await restartGame();
+      if (!response.success) {
+        setError(response.error || '重启游戏失败');
+      }
+    } catch (error: any) {
+      console.error('Failed to restart game:', error);
+      setError(error.message || '重启游戏失败');
+    }
   };
 
-  const handleToggleSound = () => {
-    setSoundEnabled(!soundEnabled);
+  // 离开房间
+  const handleLeaveRoom = async () => {
+    if (!roomId) {
+      navigate('/lobby');
+      return;
+    }
+
+    try {
+      await leaveRoom(roomId);
+      navigate('/lobby');
+    } catch (error: any) {
+      console.error('Failed to leave room:', error);
+      // 即使失败也返回大厅
+      navigate('/lobby');
+    }
   };
 
-  const getWinnerPositions = () => {
-    if (!gameResult || !gameSnapshot) return [];
-    
-    return gameResult.winners.map(winner => {
-      const playerIndex = gameSnapshot.players.findIndex(p => p.id === winner.playerId);
-      // Mock seat positions - in real implementation, get from GameTable component
-      const angle = (playerIndex * 360 / gameSnapshot.players.length) * (Math.PI / 180);
-      const radius = 200;
-      const centerX = window.innerWidth / 2;
-      const centerY = window.innerHeight / 2;
+  // 游戏结束时的处理
+  useEffect(() => {
+    if (gameState?.phase === 'ended') {
+      // 触发结算动画序列
+      setShowHandReveal(true);
+      setTimeout(() => {
+        setShowHandReveal(false);
+        setShowWinnerAnimation(true);
+      }, 3000);
       
-      return {
-        playerId: winner.playerId,
-        seatPosition: {
-          x: centerX + Math.cos(angle) * radius,
-          y: centerY + Math.sin(angle) * radius
-        },
-        winAmount: winner.winAmount
-      };
-    });
-  };
+      setTimeout(() => {
+        setShowWinnerAnimation(false);
+        setShowCelebration(true);
+      }, 5000);
+      
+      setTimeout(() => {
+        setShowCelebration(false);
+        setShowResultModal(true);
+      }, 7000);
+    }
+  }, [gameState?.phase]);
 
-  const getPotPosition = () => {
-    // Mock pot position - center of screen
-    return {
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2
-    };
-  };
+  // 错误处理
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
-  if (!gameSnapshot) {
+  // 获取当前玩家信息
+  const myPlayer = user ? getMyPlayer(user.id) : null;
+  const currentPlayer = getCurrentPlayer();
+  const isMyTurn = user ? currentPlayer?.id === user.id : false;
+
+  // 加载状态
+  if (isJoiningRoom) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <div className="text-gray-600">加载游戏中...</div>
+      <div className="min-h-screen bg-green-800 flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-xl">正在进入房间...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 错误状态
+  if (!currentRoom) {
+    return (
+      <div className="min-h-screen bg-green-800 flex items-center justify-center">
+        <div className="text-white text-center">
+          <p className="text-xl mb-4">房间不存在或已关闭</p>
+          <button
+            onClick={() => navigate('/lobby')}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            返回大厅
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 p-4">
-      {/* 顶部导航栏 */}
-      <div className="mb-4 flex justify-between items-center">
-        <button
-          onClick={handleLeaveGame}
-          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          离开游戏
-        </button>
-        
-        <div className="text-white text-center">
-          <h1 className="text-xl font-bold">德州扑克</h1>
-          <div className="text-sm text-gray-300">房间: {roomId}</div>
-        </div>
+    <div className="min-h-screen bg-green-800 relative overflow-hidden">
+      {/* 网络状态指示器 */}
+      <div className="absolute top-4 right-4 z-10">
+        <NetworkIndicator
+          connectionStatus={connectionStatus}
+          networkQuality={networkQuality}
+          showDetails={false}
+        />
+      </div>
 
-        <div className="flex items-center space-x-4">
-          <SoundControl 
-            soundEnabled={soundEnabled} 
-            onToggleSound={handleToggleSound}
-          />
-          
+      {/* 错误提示 */}
+      {error && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20">
+          <div className="bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
+            {error}
+          </div>
+        </div>
+      )}
+
+      {/* 游戏桌面 */}
+      {gameSnapshot && (
+        <GameTable
+          gameSnapshot={gameSnapshot}
+          currentUserId={user?.id || ''}
+          onPlayerAction={handlePlayerAction}
+          className="h-screen"
+        />
+      )}
+
+      {/* 操作面板 */}
+      {gameSnapshot && isInGame && isMyTurn && (
+        <ActionPanel
+          currentBet={gameSnapshot.currentPlayerId ? 
+            gameSnapshot.players.find(p => p.id === gameSnapshot.currentPlayerId)?.currentBet || 0 : 0
+          }
+          maxBet={myPlayer?.chips || 0}
+          minRaise={Math.max(...gameSnapshot.players.map(p => p.currentBet)) + 10}
+          onAction={handlePlayerAction}
+          className="absolute bottom-4 left-1/2 transform -translate-x-1/2"
+        />
+      )}
+
+      {/* 准备按钮 */}
+      {currentRoom && !isInGame && (
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
           <button
-            onClick={simulateGameEnd}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
+            onClick={handleReady}
+            className={`px-6 py-3 rounded-lg font-medium ${
+              currentRoom.players.find(p => p.id === user?.id)?.isReady
+                ? 'bg-green-600 text-white'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
           >
-            模拟结算
+            {currentRoom.players.find(p => p.id === user?.id)?.isReady ? '已准备' : '准备'}
           </button>
-
-          <div className="bg-gray-800 text-white px-4 py-2 rounded-lg">
-            <div className="text-sm">我的筹码</div>
-            <div className="font-bold">
-              ${gameSnapshot.players.find(p => p.id === 'user1')?.chips.toLocaleString()}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 游戏区域 */}
-      <div className="flex h-[calc(100vh-120px)] gap-4">
-        {/* 左侧：操作历史 */}
-        <div className="w-80 flex-shrink-0">
-          <ActionHistory
-            actions={gameSnapshot.actionHistory}
-            players={gameSnapshot.players}
-            maxItems={15}
-            className="h-full"
-          />
-        </div>
-
-        {/* 中间：游戏桌面 */}
-        <div className="flex-1 flex flex-col">
-          <div className="flex-1">
-            <GameTable
-              gameSnapshot={gameSnapshot}
-              currentUserId="user1" // Mock current user ID
-              onPlayerAction={handlePlayerAction}
-              className="w-full h-full"
-            />
-          </div>
-          
-          {/* 底部：操作面板 */}
-          <div className="mt-4">
-            <ActionPanel
-              gameSnapshot={gameSnapshot}
-              currentUserId="user1" // Mock current user ID
-              onPlayerAction={handlePlayerAction}
-              className="w-full"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Sound Effects */}
-      <GameSoundEffects enabled={soundEnabled} />
-
-      {/* Hand Reveal Modal */}
-      {showHandReveal && gameResult && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-30 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
-            <h2 className="text-xl font-bold mb-4 text-center">手牌揭示</h2>
-            <AllHandsReveal
-              players={gameSnapshot.players.map(player => ({
-                id: player.id,
-                name: player.name,
-                cards: player.cards,
-                hand: gameResult.winners.find(w => w.playerId === player.id)?.hand || null,
-                isWinner: gameResult.winners.some(w => w.playerId === player.id),
-                status: player.status
-              }))}
-              isVisible={true}
-              onRevealComplete={() => {
-                setTimeout(() => setShowHandReveal(false), 1000);
-              }}
-            />
-          </div>
         </div>
       )}
 
-      {/* Winner Animation */}
-      {showWinnerAnimation && (
+      {/* 行动历史 */}
+      {gameSnapshot && (
+        <ActionHistory
+          actions={gameSnapshot.actionHistory}
+          className="absolute top-4 left-4 max-h-64 w-80"
+        />
+      )}
+
+      {/* 离开房间按钮 */}
+      <button
+        onClick={handleLeaveRoom}
+        className="absolute top-4 left-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 z-10"
+      >
+        离开房间
+      </button>
+
+      {/* 音效控制 */}
+      <SoundControl
+        enabled={soundEnabled}
+        onToggle={setSoundEnabled}
+        className="absolute bottom-4 left-4"
+      />
+
+      {/* 游戏音效 */}
+      <GameSoundEffects
+        enabled={soundEnabled}
+        gameSnapshot={gameSnapshot}
+      />
+
+      {/* 动画和模态框 */}
+      {showHandReveal && gameSnapshot && (
+        <AllHandsReveal
+          players={gameSnapshot.players}
+          onComplete={() => setShowHandReveal(false)}
+        />
+      )}
+
+      {showWinnerAnimation && gameSnapshot && (
         <WinnerAnimationSequence
-          winners={getWinnerPositions()}
-          potPosition={getPotPosition()}
-          isVisible={true}
-          onSequenceComplete={() => setShowWinnerAnimation(false)}
+          gameSnapshot={gameSnapshot}
+          onComplete={() => setShowWinnerAnimation(false)}
         />
       )}
 
-      {/* Celebration Effects */}
-      {showCelebration && gameResult && (
+      {showCelebration && (
         <CelebrationEffects
-          isWinner={gameResult.winners.some(w => w.playerId === 'user1')}
-          winAmount={gameResult.winners.find(w => w.playerId === 'user1')?.winAmount}
-          isVisible={true}
+          onComplete={() => setShowCelebration(false)}
         />
       )}
 
-      {/* Result Modal */}
-      <ResultModal
-        isOpen={showResultModal}
-        onClose={() => setShowResultModal(false)}
-        gameResult={gameResult}
-        players={gameSnapshot.players}
-        onNextGame={handleNextGame}
-        onBackToLobby={handleBackToLobby}
+      {showResultModal && gameResult && (
+        <ResultModal
+          result={gameResult}
+          onNewGame={handleRestartGame}
+          onLeaveLobby={handleLeaveRoom}
+          onClose={() => setShowResultModal(false)}
+        />
+      )}
+
+      {/* 重连处理 */}
+      <ReconnectionHandler
+        connectionStatus={connectionStatus}
+        onReconnect={connect}
+        autoReconnect={true}
+        maxRetries={5}
       />
     </div>
   );
 };
+
+// 辅助函数：转换Socket数据格式到本地格式
+function convertSocketPhaseToLocal(phase: string): GamePhase {
+  switch (phase) {
+    case 'waiting': return GamePhase.WAITING;
+    case 'preflop': return GamePhase.PRE_FLOP;
+    case 'flop': return GamePhase.FLOP;
+    case 'turn': return GamePhase.TURN;
+    case 'river': return GamePhase.RIVER;
+    case 'showdown': return GamePhase.SHOWDOWN;
+    case 'ended': return GamePhase.ENDED;
+    default: return GamePhase.WAITING;
+  }
+}
+
+function convertSocketStatusToLocal(status: string): PlayerStatus {
+  switch (status) {
+    case 'active': return PlayerStatus.ACTIVE;
+    case 'folded': return PlayerStatus.FOLDED;
+    case 'allin': return PlayerStatus.ALL_IN;
+    case 'away': return PlayerStatus.SITTING_OUT;
+    default: return PlayerStatus.ACTIVE;
+  }
+}
+
+function convertSocketActionToLocal(action: string): PlayerAction {
+  switch (action) {
+    case 'fold': return PlayerAction.FOLD;
+    case 'check': return PlayerAction.CHECK;
+    case 'call': return PlayerAction.CALL;
+    case 'raise': return PlayerAction.RAISE;
+    case 'allin': return PlayerAction.ALL_IN;
+    default: return PlayerAction.FOLD;
+  }
+}
+
+function convertLocalActionToSocket(action: PlayerAction): string {
+  switch (action) {
+    case PlayerAction.FOLD: return 'fold';
+    case PlayerAction.CHECK: return 'check';
+    case PlayerAction.CALL: return 'call';
+    case PlayerAction.RAISE: return 'raise';
+    case PlayerAction.ALL_IN: return 'allin';
+    default: return 'fold';
+  }
+}
+
+function parseCard(cardStr: string): { suit: Suit; rank: Rank } {
+  // 简化的卡牌解析，实际应该更健壮
+  const rankMap: { [key: string]: Rank } = {
+    'A': Rank.ACE, '2': Rank.TWO, '3': Rank.THREE, '4': Rank.FOUR,
+    '5': Rank.FIVE, '6': Rank.SIX, '7': Rank.SEVEN, '8': Rank.EIGHT,
+    '9': Rank.NINE, 'T': Rank.TEN, 'J': Rank.JACK, 'Q': Rank.QUEEN, 'K': Rank.KING
+  };
+  
+  const suitMap: { [key: string]: Suit } = {
+    'S': Suit.SPADES, 'H': Suit.HEARTS, 'D': Suit.DIAMONDS, 'C': Suit.CLUBS
+  };
+
+  const rank = rankMap[cardStr[0]] || Rank.ACE;
+  const suit = suitMap[cardStr[1]] || Suit.SPADES;
+
+  return { suit, rank };
+}
 
 export default GamePage;

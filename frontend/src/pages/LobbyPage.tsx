@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUserStore } from '../stores/userStore';
 import { useRoomStore } from '../stores/roomStore';
+import { useSocket } from '../hooks/useSocket';
+import { NetworkIndicator } from '../components/NetworkIndicator';
 import RoomList from '../components/RoomList';
 import CreateRoomModal from '../components/CreateRoomModal';
 import JoinRoomModal from '../components/JoinRoomModal';
 
 const LobbyPage = () => {
+  const navigate = useNavigate();
   const { user, logout } = useUserStore();
   const { 
     rooms, 
@@ -17,9 +21,21 @@ const LobbyPage = () => {
     refreshRooms 
   } = useRoomStore();
   
+  // Socket integration
+  const {
+    connected,
+    connectionStatus,
+    networkQuality,
+    connect,
+    quickStart,
+    joinRoom: socketJoinRoom
+  } = useSocket();
+  
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [isQuickStarting, setIsQuickStarting] = useState(false);
+  const [socketError, setSocketError] = useState<string | null>(null);
 
   // Fetch rooms on component mount
   useEffect(() => {
@@ -35,7 +51,64 @@ const LobbyPage = () => {
     return () => clearInterval(interval);
   }, [refreshRooms]);
 
-  const handleQuickStart = () => {
+  // Socket connection effect
+  useEffect(() => {
+    if (user && !connected) {
+      connect().catch(error => {
+        console.error('Failed to connect to socket:', error);
+        setSocketError('无法连接到服务器');
+      });
+    }
+  }, [user, connected, connect]);
+
+  // Socket quick start implementation
+  const handleQuickStart = async () => {
+    if (!connected) {
+      setSocketError('未连接到服务器，请检查网络连接');
+      return;
+    }
+
+    setIsQuickStarting(true);
+    setSocketError(null);
+
+    try {
+      const response = await quickStart();
+      if (response.success && response.data?.roomId) {
+        // 直接跳转到游戏页面
+        navigate(`/game/${response.data.roomId}`);
+      } else {
+        setSocketError(response.error || '快速开始失败');
+      }
+    } catch (error: any) {
+      console.error('Quick start failed:', error);
+      setSocketError(error.message || '快速开始失败');
+    } finally {
+      setIsQuickStarting(false);
+    }
+  };
+
+  // Enhanced room join with socket integration
+  const handleJoinRoom = async (roomId: string, password?: string) => {
+    if (!connected) {
+      setSocketError('未连接到服务器，请检查网络连接');
+      return;
+    }
+
+    try {
+      const response = await socketJoinRoom(roomId, password);
+      if (response.success) {
+        navigate(`/game/${roomId}`);
+      } else {
+        setSocketError(response.error || '加入房间失败');
+      }
+    } catch (error: any) {
+      console.error('Join room failed:', error);
+      setSocketError(error.message || '加入房间失败');
+    }
+  };
+
+  // Fallback to API-based room operations
+  const handleQuickStartFallback = () => {
     // Find an available room or create a new one
     const availableRoom = rooms.find(room => 
       room.status === 'WAITING' && 
@@ -52,7 +125,8 @@ const LobbyPage = () => {
     }
   };
 
-  const handleJoinRoom = (roomId: string, hasPassword: boolean) => {
+  // Fallback room join for UI click
+  const handleRoomItemClick = (roomId: string, hasPassword: boolean) => {
     setSelectedRoomId(roomId);
     setIsJoinModalOpen(true);
   };
@@ -71,11 +145,20 @@ const LobbyPage = () => {
       <header className="bg-green-800/50 backdrop-blur-sm border-b border-green-700">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
+            <div className="flex items-center space-x-4">
               <h1 className="text-2xl font-bold text-white">🃏 德州扑克</h1>
+              {/* 网络状态指示器 */}
+              <NetworkIndicator
+                connectionStatus={connectionStatus}
+                networkQuality={networkQuality}
+                showDetails={false}
+              />
             </div>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
+                <div className="text-white text-sm">
+                  <div>筹码: {user?.chips || 0}</div>
+                </div>
                 {user?.avatar && (
                   <img
                     src={user.avatar}
@@ -125,13 +208,20 @@ const LobbyPage = () => {
           </button>
           
           <button
-            onClick={handleQuickStart}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors duration-200 flex items-center justify-center gap-2"
+            onClick={connected ? handleQuickStart : handleQuickStartFallback}
+            disabled={isQuickStarting || !user}
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-3 rounded-lg font-semibold transition-colors duration-200 flex items-center justify-center gap-2"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            快速开始
+            {isQuickStarting ? (
+              <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            )}
+            {isQuickStarting ? '匹配中...' : '快速开始'}
           </button>
           
           <button
@@ -146,7 +236,7 @@ const LobbyPage = () => {
           </button>
         </div>
 
-        {/* Error Message */}
+        {/* Error Messages */}
         {error && (
           <div className="bg-red-500 text-white p-4 rounded-lg mb-6 flex items-center justify-between">
             <span>{error}</span>
@@ -157,6 +247,38 @@ const LobbyPage = () => {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
+            </button>
+          </div>
+        )}
+        
+        {socketError && (
+          <div className="bg-red-500 text-white p-4 rounded-lg mb-6 flex items-center justify-between">
+            <span>{socketError}</span>
+            <button
+              onClick={() => setSocketError(null)}
+              className="text-white hover:text-red-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        {/* Connection Status Warning */}
+        {!connected && user && (
+          <div className="bg-yellow-500 text-yellow-900 p-4 rounded-lg mb-6 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.966-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <span>未连接到实时服务器，部分功能可能受限</span>
+            </div>
+            <button
+              onClick={connect}
+              className="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700"
+            >
+              重连
             </button>
           </div>
         )}
@@ -173,7 +295,7 @@ const LobbyPage = () => {
           <RoomList
             rooms={rooms}
             isLoading={isLoading}
-            onJoinRoom={handleJoinRoom}
+            onJoinRoom={handleRoomItemClick}
             pagination={pagination}
             onPageChange={handlePageChange}
           />
@@ -182,7 +304,7 @@ const LobbyPage = () => {
         {/* User Stats */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-white">5,000</div>
+            <div className="text-2xl font-bold text-white">{user?.chips?.toLocaleString() || 0}</div>
             <div className="text-green-200">筹码余额</div>
           </div>
           <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center">
@@ -206,6 +328,7 @@ const LobbyPage = () => {
         isOpen={isJoinModalOpen}
         onClose={() => setIsJoinModalOpen(false)}
         roomId={selectedRoomId}
+        onJoinRoom={connected ? handleJoinRoom : undefined}
       />
     </div>
   );
