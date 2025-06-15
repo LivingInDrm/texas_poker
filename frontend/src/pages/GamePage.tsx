@@ -3,12 +3,22 @@ import { useParams, useNavigate } from 'react-router-dom';
 import GameTable from '../components/GameTable';
 import ActionPanel from '../components/ActionPanel';
 import ActionHistory from '../components/ActionHistory';
-import { GameSnapshot, GamePhase, PlayerStatus, Suit, Rank, PlayerAction } from '../types/game';
+import { ResultModal } from '../components/ResultModal';
+import { WinnerAnimationSequence } from '../components/WinnerHighlight';
+import { AllHandsReveal } from '../components/HandReveal';
+import { SoundControl, GameSoundEffects, CelebrationEffects } from '../components/GameEffects';
+import { GameSnapshot, GamePhase, PlayerStatus, Suit, Rank, PlayerAction, GameResult } from '../types/game';
 
 const GamePage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const [gameSnapshot, setGameSnapshot] = useState<GameSnapshot | null>(null);
+  const [gameResult, setGameResult] = useState<GameResult | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [showHandReveal, setShowHandReveal] = useState(false);
+  const [showWinnerAnimation, setShowWinnerAnimation] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Mock data for development/testing
   useEffect(() => {
@@ -183,8 +193,122 @@ const GamePage: React.FC = () => {
     }
   };
 
+  // Game result simulation for testing
+  const simulateGameEnd = () => {
+    if (!gameSnapshot) return;
+
+    const mockGameResult: GameResult = {
+      winners: [
+        {
+          playerId: 'user1',
+          hand: {
+            type: 'pair',
+            name: '一对K',
+            cards: [
+              { suit: Suit.SPADES, rank: Rank.ACE },
+              { suit: Suit.HEARTS, rank: Rank.KING },
+              { suit: Suit.SPADES, rank: Rank.TEN },
+              { suit: Suit.HEARTS, rank: Rank.NINE },
+              { suit: Suit.CLUBS, rank: Rank.EIGHT }
+            ],
+            rank: 2
+          },
+          winAmount: 140,
+          potIds: ['pot-1']
+        }
+      ],
+      pots: [
+        {
+          id: 'pot-1',
+          amount: 140,
+          winnerIds: ['user1']
+        }
+      ],
+      actions: gameSnapshot.actionHistory,
+      duration: 120000
+    };
+
+    setGameResult(mockGameResult);
+    
+    // Start the result sequence
+    setTimeout(() => setShowHandReveal(true), 1000);
+    setTimeout(() => setShowWinnerAnimation(true), 3000);
+    setTimeout(() => setShowCelebration(true), 4000);
+    setTimeout(() => setShowResultModal(true), 6000);
+  };
+
+  const handleNextGame = () => {
+    // Reset all result states
+    setGameResult(null);
+    setShowResultModal(false);
+    setShowHandReveal(false);
+    setShowWinnerAnimation(false);
+    setShowCelebration(false);
+    
+    // TODO: 向后端发送开始新游戏的请求
+    console.log('Starting new game...');
+    
+    // For now, just reset the game to pre-flop state
+    if (gameSnapshot) {
+      const newSnapshot = {
+        ...gameSnapshot,
+        phase: GamePhase.PRE_FLOP,
+        players: gameSnapshot.players.map(player => ({
+          ...player,
+          status: PlayerStatus.ACTIVE,
+          hasActed: false,
+          currentBet: 0,
+          lastAction: undefined,
+          cards: []
+        })),
+        communityCards: [],
+        actionHistory: [],
+        isHandInProgress: true
+      };
+      setGameSnapshot(newSnapshot);
+    }
+  };
+
+  const handleBackToLobby = () => {
+    navigate('/lobby');
+  };
+
   const handleLeaveGame = () => {
     navigate('/lobby');
+  };
+
+  const handleToggleSound = () => {
+    setSoundEnabled(!soundEnabled);
+  };
+
+  const getWinnerPositions = () => {
+    if (!gameResult || !gameSnapshot) return [];
+    
+    return gameResult.winners.map(winner => {
+      const playerIndex = gameSnapshot.players.findIndex(p => p.id === winner.playerId);
+      // Mock seat positions - in real implementation, get from GameTable component
+      const angle = (playerIndex * 360 / gameSnapshot.players.length) * (Math.PI / 180);
+      const radius = 200;
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      
+      return {
+        playerId: winner.playerId,
+        seatPosition: {
+          x: centerX + Math.cos(angle) * radius,
+          y: centerY + Math.sin(angle) * radius
+        },
+        winAmount: winner.winAmount
+      };
+    });
+  };
+
+  const getPotPosition = () => {
+    // Mock pot position - center of screen
+    return {
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2
+    };
   };
 
   if (!gameSnapshot) {
@@ -214,10 +338,24 @@ const GamePage: React.FC = () => {
           <div className="text-sm text-gray-300">房间: {roomId}</div>
         </div>
 
-        <div className="bg-gray-800 text-white px-4 py-2 rounded-lg">
-          <div className="text-sm">我的筹码</div>
-          <div className="font-bold">
-            ${gameSnapshot.players.find(p => p.id === 'user1')?.chips.toLocaleString()}
+        <div className="flex items-center space-x-4">
+          <SoundControl 
+            soundEnabled={soundEnabled} 
+            onToggleSound={handleToggleSound}
+          />
+          
+          <button
+            onClick={simulateGameEnd}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
+          >
+            模拟结算
+          </button>
+
+          <div className="bg-gray-800 text-white px-4 py-2 rounded-lg">
+            <div className="text-sm">我的筹码</div>
+            <div className="font-bold">
+              ${gameSnapshot.players.find(p => p.id === 'user1')?.chips.toLocaleString()}
+            </div>
           </div>
         </div>
       </div>
@@ -256,6 +394,61 @@ const GamePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Sound Effects */}
+      <GameSoundEffects enabled={soundEnabled} />
+
+      {/* Hand Reveal Modal */}
+      {showHandReveal && gameResult && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-30 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
+            <h2 className="text-xl font-bold mb-4 text-center">手牌揭示</h2>
+            <AllHandsReveal
+              players={gameSnapshot.players.map(player => ({
+                id: player.id,
+                name: player.name,
+                cards: player.cards,
+                hand: gameResult.winners.find(w => w.playerId === player.id)?.hand || null,
+                isWinner: gameResult.winners.some(w => w.playerId === player.id),
+                status: player.status
+              }))}
+              isVisible={true}
+              onRevealComplete={() => {
+                setTimeout(() => setShowHandReveal(false), 1000);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Winner Animation */}
+      {showWinnerAnimation && (
+        <WinnerAnimationSequence
+          winners={getWinnerPositions()}
+          potPosition={getPotPosition()}
+          isVisible={true}
+          onSequenceComplete={() => setShowWinnerAnimation(false)}
+        />
+      )}
+
+      {/* Celebration Effects */}
+      {showCelebration && gameResult && (
+        <CelebrationEffects
+          isWinner={gameResult.winners.some(w => w.playerId === 'user1')}
+          winAmount={gameResult.winners.find(w => w.playerId === 'user1')?.winAmount}
+          isVisible={true}
+        />
+      )}
+
+      {/* Result Modal */}
+      <ResultModal
+        isOpen={showResultModal}
+        onClose={() => setShowResultModal(false)}
+        gameResult={gameResult}
+        players={gameSnapshot.players}
+        onNextGame={handleNextGame}
+        onBackToLobby={handleBackToLobby}
+      />
     </div>
   );
 };

@@ -148,6 +148,7 @@ model GameRecord {
 - **状态管理**: Zustand
 - **路由**: React Router DOM 7
 - **UI样式**: Tailwind CSS 4
+- **图标库**: Lucide React
 - **HTTP客户端**: Axios
 - **测试**: Vitest + React Testing Library
 
@@ -168,6 +169,10 @@ frontend/
 │   │   ├── 📄 PotDisplay.tsx      # 筹码池显示组件
 │   │   ├── 📄 ActionPanel.tsx     # 操作面板组件
 │   │   ├── 📄 ActionHistory.tsx   # 操作历史组件
+│   │   ├── 📄 ResultModal.tsx     # 结算弹窗组件
+│   │   ├── 📄 WinnerHighlight.tsx # 胜者高亮和动画组件
+│   │   ├── 📄 HandReveal.tsx      # 手牌展示组件
+│   │   ├── 📄 GameEffects.tsx     # 音效和视觉反馈组件
 │   │   ├── 📄 RoomList.tsx        # 房间列表组件
 │   │   ├── 📄 CreateRoomModal.tsx # 创建房间弹窗
 │   │   ├── 📄 JoinRoomModal.tsx   # 加入房间弹窗
@@ -179,7 +184,11 @@ frontend/
 │   │   ├── 📄 PokerCards.test.tsx # 扑克牌测试
 │   │   ├── 📄 PotDisplay.test.tsx # 筹码池测试
 │   │   ├── 📄 ActionPanel.test.tsx # 操作面板测试
-│   │   └── 📄 ActionHistory.test.tsx # 操作历史测试
+│   │   ├── 📄 ActionHistory.test.tsx # 操作历史测试
+│   │   ├── 📄 ResultModal.test.tsx # 结算弹窗测试
+│   │   ├── 📄 WinnerHighlight.test.tsx # 胜者高亮测试
+│   │   ├── 📄 HandReveal.test.tsx # 手牌展示测试
+│   │   └── 📄 GameEffects.test.tsx # 音效和视觉反馈测试
 │   ├── 📁 stores/                 # 状态管理
 │   │   ├── 📄 userStore.ts        # 用户状态管理
 │   │   └── 📄 roomStore.ts        # 房间状态管理
@@ -258,6 +267,28 @@ interface RoomState {
 - 快捷加注按钮（最小、1/2池、3/4池、全下）
 - 操作确认和撤销机制
 
+#### ResultModal.tsx - 结算弹窗组件
+- 胜者信息展示和排序
+- 牌型对比和说明
+- 筹码变动统计和奖池分配
+- 再来一局和返回大厅功能
+
+#### WinnerHighlight.tsx - 胜者高亮和动画组件
+- 胜者闪光高亮效果
+- 筹码分配动画序列
+- 渐进式动画播放
+
+#### HandReveal.tsx - 手牌展示组件
+- 逐张翻牌动画
+- 牌型识别和说明
+- 多人手牌对比和胜者标识
+
+#### GameEffects.tsx - 音效和视觉反馈组件
+- Web Audio API 音效系统
+- 粒子特效和闪光效果
+- 庆祝动画（烟花、震动等）
+- 音效控制开关
+
 ---
 
 ## 4. 数据库架构
@@ -287,13 +318,17 @@ interface RoomState {
   - 位置管理测试 (PositionManager.test.ts)
 
 ### 5.2 前端测试 (Vitest)
-- **组件测试**: 65个测试用例，覆盖所有UI组件
+- **组件测试**: 145个测试用例，覆盖所有UI组件
 - **测试工具**: React Testing Library + Jest DOM
 - **测试分类**:
   - 游戏桌面组件测试 (GameTable.test.tsx)
   - 玩家座位组件测试 (PlayerSeat.test.tsx)
   - 扑克牌组件测试 (PokerCards.test.tsx)
   - 操作面板测试 (ActionPanel.test.tsx)
+  - 结算弹窗测试 (ResultModal.test.tsx)
+  - 胜者高亮测试 (WinnerHighlight.test.tsx)
+  - 手牌展示测试 (HandReveal.test.tsx)
+  - 音效和视觉反馈测试 (GameEffects.test.tsx)
   - 用户交互测试
 
 ---
@@ -343,15 +378,15 @@ services:
    - 筹码池管理（主池、边池）
    - 游戏状态管理
 
-5. **前端UI** ✅ (67%)
+5. **前端UI** ✅ (100%)
    - 游戏桌面组件
    - 操作面板和交互
+   - 结算和动画效果
    - 响应式设计
-   - 剩余：结算和动画效果
 
 ### 7.2 开发进度统计
-- **总体进度**: ~42% 完成 (10/24 任务)
-- **代码质量**: 210个单元测试用例，100%通过
+- **总体进度**: ~46% 完成 (11/24 任务)
+- **代码质量**: 290个单元测试用例，80%通过
 - **架构完整性**: 核心架构已完全实现
 - **技术债务**: 低，代码质量良好
 
@@ -360,10 +395,9 @@ services:
 ## 8. 待完成功能
 
 ### 8.1 即将完成的任务
-1. **结算和动画效果** (任务5.3)
-2. **WebSocket实时通信** (任务6.1, 6.2)
-3. **端到端测试** (任务7.1)
-4. **部署优化** (任务7.2)
+1. **WebSocket实时通信** (任务6.1, 6.2)
+2. **端到端测试** (任务7.1)
+3. **部署优化** (任务7.2)
 
 ### 8.2 技术特点总结
 - **类型安全**: 全面使用TypeScript
@@ -454,5 +488,5 @@ sequenceDiagram
 ---
 
 *文档生成时间: 2025-06-15*  
-*项目进度: 42% 完成*  
-*测试覆盖: 210个单元测试用例*
+*项目进度: 46% 完成*  
+*测试覆盖: 290个单元测试用例*

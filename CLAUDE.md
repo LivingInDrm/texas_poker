@@ -1,9 +1,9 @@
 # 关键文档
-总体产品设计文档: texas_poker_product_design
-总体技术设计文档: texas_poker_tech_design
+总体产品设计文档: texas_poker_product_design.md
+总体技术设计文档: texas_poker_tech_design.md
 详细开发计划以及当前开发进展文档: plan.md
 
-你需要按照上述文档中的设计进行开发，在plan.md中记录任务进度
+你需要按照上述总体产品设计文档和总体技术设计文档进行开发，并参考codebase_architecture.md来判断目前的目录结构和模块结构，在plan.md中记录任务进度。
 
 
 # Claude Coding Prompt Guide: Explore -> Plan -> Code -> Commit
