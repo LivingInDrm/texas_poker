@@ -36,3 +36,8 @@ redis_data/
 # Temporary files
 *.tmp
 *.temp
+
+# E2E Test results
+e2e-tests/test-results/
+e2e-tests/playwright-report/
+e2e-tests/test-results.json
