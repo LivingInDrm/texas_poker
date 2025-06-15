@@ -14,7 +14,7 @@ import {
 } from '../../types/socket';
 import { redisClient } from '../../db';
 import prisma from '../../prisma';
-import { GameState as GameEngine } from '../../game/GameState';
+import { GameState as GameEngine, PlayerAction as GamePlayerAction } from '../../game/GameState';
 import { Card } from '../../game/Card';
 import { validationMiddleware } from '../middleware/validation';
 
@@ -59,23 +59,29 @@ export function setupGameHandlers(
 
       if (allReady && !roomState.gameStarted) {
         // 开始游戏
-        const gameEngine = new GameEngine(roomState.players.map(p => ({
-          id: p.id,
-          username: p.username,
-          chips: p.chips
-        })));
-
-        // 设置盲注
-        gameEngine.setBlinds(roomState.smallBlind, roomState.bigBlind);
+        const gameEngine = new GameEngine(roomId);
         
-        // 开始新游戏
-        gameEngine.startNewGame();
+        // 添加玩家到游戏引擎
+        for (const player of roomState.players) {
+          gameEngine.addPlayer(player.id, player.username, player.chips);
+          gameEngine.setPlayerReady(player.id, true);
+        }
+
+        // 开始新一手牌
+        const gameStarted = gameEngine.startNewHand();
+        if (!gameStarted) {
+          return callback({
+            success: false,
+            error: 'Failed to start game',
+            message: 'Could not start new hand'
+          });
+        }
 
         // 转换游戏状态为WebSocket格式
         const gameState = convertGameEngineToWebSocketState(gameEngine, roomId);
 
         roomState.gameStarted = true;
-        roomState.status = 'playing';
+        roomState.status = 'PLAYING';
         roomState.gameState = gameState;
 
         // 保存房间状态
@@ -85,11 +91,12 @@ export function setupGameHandlers(
         io.to(roomId).emit(SOCKET_EVENTS.GAME_STARTED, { gameState });
 
         // 通知当前玩家需要行动
-        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+        const currentPlayerId = gameEngine.getCurrentPlayerId();
+        const currentPlayer = currentPlayerId ? roomState.players.find(p => p.id === currentPlayerId) : null;
         if (currentPlayer) {
-          const validActions = gameEngine.getValidActions(currentPlayer.id);
+          const validActions = gameEngine.getValidActions(currentPlayerId!);
           io.to(roomId).emit(SOCKET_EVENTS.GAME_ACTION_REQUIRED, {
-            playerId: currentPlayer.id,
+            playerId: currentPlayerId!,
             timeout: gameState.timeout,
             validActions
           });
@@ -169,9 +176,19 @@ export function setupGameHandlers(
         });
       }
 
+      // 转换action.type到PlayerAction枚举
+      const playerAction = convertStringToPlayerAction(action.type);
+      if (!playerAction) {
+        return callback({
+          success: false,
+          error: 'Invalid action type',
+          message: SOCKET_ERRORS.INVALID_ACTION
+        });
+      }
+
       // 验证行动是否有效
       const validActions = gameEngine.getValidActions(userId);
-      if (!validActions.includes(action.type)) {
+      if (!validActions.includes(playerAction)) {
         return callback({
           success: false,
           error: 'Invalid action',
@@ -180,13 +197,13 @@ export function setupGameHandlers(
       }
 
       // 执行行动
-      const actionResult = gameEngine.makeAction(userId, action.type, action.amount);
+      const actionSuccess = gameEngine.makeAction(userId, playerAction, action.amount);
       
-      if (!actionResult.success) {
+      if (!actionSuccess) {
         return callback({
           success: false,
-          error: actionResult.error || 'Action failed',
-          message: actionResult.error || SOCKET_ERRORS.INVALID_ACTION
+          error: 'Action failed',
+          message: SOCKET_ERRORS.INVALID_ACTION
         });
       }
 
@@ -195,7 +212,7 @@ export function setupGameHandlers(
       roomState.gameState = newGameState;
 
       // 保存房间状态
-      await redisClient.set(`room:${roomId}`, JSON.stringify(roomState), 'EX', 3600);
+      await redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
 
       // 发送成功响应
       callback({
@@ -237,7 +254,7 @@ export function setupGameHandlers(
 
         // 重置房间状态
         roomState.gameStarted = false;
-        roomState.status = 'waiting';
+        roomState.status = 'WAITING';
         roomState.gameState = undefined;
         roomState.players.forEach(p => p.isReady = false);
         
@@ -298,12 +315,12 @@ export function setupGameHandlers(
 
       // 重置房间状态
       roomState.gameStarted = false;
-      roomState.status = 'waiting';
+      roomState.status = 'WAITING';
       roomState.gameState = undefined;
       roomState.players.forEach(p => p.isReady = false);
 
       // 保存房间状态
-      await redisClient.set(`room:${roomId}`, JSON.stringify(roomState), 'EX', 3600);
+      await redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
 
       // 发送成功响应
       callback({
@@ -333,11 +350,11 @@ function convertGameEngineToWebSocketState(gameEngine: GameEngine, roomId: strin
   
   return {
     phase: engineState.phase as any,
-    players: engineState.players.map(p => ({
+    players: engineState.players.map((p: any) => ({
       id: p.id,
       username: p.username,
       chips: p.chips,
-      cards: p.cards.map(card => card.toString()),
+      cards: p.cards.map((card: any) => card.toString()),
       status: p.status as any,
       position: p.position,
       totalBet: p.totalBet,
@@ -347,15 +364,15 @@ function convertGameEngineToWebSocketState(gameEngine: GameEngine, roomId: strin
     smallBlindIndex: engineState.smallBlindIndex,
     bigBlindIndex: engineState.bigBlindIndex,
     currentPlayerIndex: engineState.currentPlayerIndex,
-    board: engineState.board.map(card => card.toString()),
+    board: engineState.board.map((card: any) => card.toString()),
     pot: engineState.pot,
-    sidePots: engineState.sidePots.map(sp => ({
+    sidePots: engineState.sidePots.map((sp: any) => ({
       amount: sp.amount,
       eligiblePlayers: sp.eligiblePlayers
     })),
     currentBet: engineState.currentBet,
     roundBets: engineState.roundBets,
-    history: engineState.history.map(h => ({
+    history: engineState.history.map((h: any) => ({
       playerId: h.playerId,
       action: {
         type: h.action.type as any,
@@ -371,6 +388,25 @@ function convertGameEngineToWebSocketState(gameEngine: GameEngine, roomId: strin
   };
 }
 
+// 转换字符串操作到PlayerAction枚举
+function convertStringToPlayerAction(actionType: string): GamePlayerAction | null {
+  switch (actionType.toLowerCase()) {
+    case 'fold':
+      return GamePlayerAction.FOLD;
+    case 'check':
+      return GamePlayerAction.CHECK;
+    case 'call':
+      return GamePlayerAction.CALL;
+    case 'raise':
+      return GamePlayerAction.RAISE;
+    case 'all_in':
+    case 'allin':
+      return GamePlayerAction.ALL_IN;
+    default:
+      return null;
+  }
+}
+
 // 重建游戏引擎状态
 function reconstructGameEngine(gameState: GameState): GameEngine {
   const players = gameState.players.map(p => ({
@@ -379,7 +415,7 @@ function reconstructGameEngine(gameState: GameState): GameEngine {
     chips: p.chips
   }));
 
-  const gameEngine = new GameEngine(players);
+  const gameEngine = new GameEngine(gameState.gameId);
   
   // 这里需要根据保存的状态重建游戏引擎
   // 由于游戏引擎的复杂性，这是一个简化版本
@@ -392,14 +428,18 @@ function reconstructGameEngine(gameState: GameState): GameEngine {
 function generateGameResults(gameEngine: GameEngine): GameResult[] {
   const results = gameEngine.getResults();
   
-  return results.map(result => ({
-    playerId: result.playerId,
-    username: result.username,
-    finalCards: result.finalCards.map(card => card.toString()),
-    handRank: result.handRank.description,
-    chipsWon: result.chipsWon,
-    chipsChange: result.chipsChange,
-    isWinner: result.isWinner
+  if (!results) {
+    return [];
+  }
+  
+  return results.winners.map((winner: any) => ({
+    playerId: winner.playerId,
+    username: winner.playerId, // 这里应该从其他地方获取用户名
+    finalCards: winner.hand ? [winner.hand.toString()] : [],
+    handRank: winner.hand ? winner.hand.description : 'Unknown',
+    chipsWon: winner.winAmount,
+    chipsChange: winner.winAmount,
+    isWinner: true
   }));
 }
 

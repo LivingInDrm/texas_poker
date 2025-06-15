@@ -20,7 +20,7 @@ export function setupSystemHandlers(
       console.warn(`Rate limit exceeded for user ${socket.data.username}`);
       return false;
     }
-    return originalEmit.apply(this, args);
+    return originalEmit.apply(this, args as any);
   };
 
   // Ping处理
@@ -98,7 +98,7 @@ export function setupSystemHandlers(
       } else {
         // 没有指定房间，发送通用重连确认
         socket.emit(SOCKET_EVENTS.RECONNECTED, {
-          message: 'Reconnected successfully'
+          roomId: roomId
         });
       }
     } catch (error) {
@@ -113,17 +113,17 @@ export function setupSystemHandlers(
   // 心跳检测
   const heartbeatInterval = setInterval(() => {
     if (socket.connected) {
-      socket.emit('heartbeat', Date.now());
+      // socket.emit('heartbeat', Date.now()); // 暂时注释掉非标准事件
     } else {
       clearInterval(heartbeatInterval);
     }
   }, 30000); // 每30秒发送一次心跳
 
   // 监听心跳响应
-  socket.on('heartbeat_response', (timestamp) => {
-    const latency = Date.now() - timestamp;
-    console.log(`Heartbeat from ${socket.data.username}: ${latency}ms`);
-  });
+  // socket.on('heartbeat_response', (timestamp: number) => {
+  //   const latency = Date.now() - timestamp;
+  //   console.log(`Heartbeat from ${socket.data.username}: ${latency}ms`);
+  // });
 
   // 断开连接时清理心跳
   socket.on(SOCKET_EVENTS.DISCONNECT, () => {

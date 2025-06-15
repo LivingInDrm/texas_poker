@@ -789,4 +789,91 @@ export class GameState {
       actionHistory: this.actionHistory
     };
   }
+
+  /**
+   * 获取玩家可执行的有效操作
+   */
+  getValidActions(playerId: string): PlayerAction[] {
+    const player = this.players.get(playerId);
+    if (!player || player.status !== PlayerStatus.ACTIVE) {
+      return [];
+    }
+
+    if (this.getCurrentPlayerId() !== playerId) {
+      return [];
+    }
+
+    const validActions: PlayerAction[] = [];
+    const callAmount = this.potManager.getCallAmount(playerId);
+    const minRaiseAmount = this.getMinRaiseAmount();
+
+    // 弃牌（除非已经全下，否则总是可以弃牌）
+    if (player.status === PlayerStatus.ACTIVE) {
+      validActions.push(PlayerAction.FOLD);
+    }
+
+    // 过牌（当没有人下注时）
+    if (callAmount === 0) {
+      validActions.push(PlayerAction.CHECK);
+    }
+
+    // 跟注（当有人下注且玩家筹码足够时）
+    if (callAmount > 0 && player.chips >= callAmount) {
+      validActions.push(PlayerAction.CALL);
+    }
+
+    // 加注（当玩家筹码足够时）
+    if (player.chips >= minRaiseAmount) {
+      validActions.push(PlayerAction.RAISE);
+    }
+
+    // 全下（当玩家还有筹码时）
+    if (player.chips > 0) {
+      validActions.push(PlayerAction.ALL_IN);
+    }
+
+    return validActions;
+  }
+
+  /**
+   * 获取当前玩家（用于兼容）
+   */
+  getCurrentPlayer(): GamePlayer | null {
+    const playerId = this.getCurrentPlayerId();
+    return playerId ? this.players.get(playerId) || null : null;
+  }
+
+  /**
+   * 执行玩家操作（别名方法）
+   */
+  makeAction(playerId: string, action: PlayerAction, amount: number = 0): boolean {
+    return this.executePlayerAction(playerId, action, amount);
+  }
+
+  /**
+   * 检查游戏阶段是否发生变化（临时标记）
+   */
+  private lastKnownPhase: GamePhase = GamePhase.WAITING;
+  
+  hasPhaseChanged(): boolean {
+    if (this.lastKnownPhase !== this.phase) {
+      this.lastKnownPhase = this.phase;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * 获取游戏状态（别名方法）
+   */
+  getState(): any {
+    return this.getGameSnapshot();
+  }
+
+  /**
+   * 获取游戏结果（别名方法）
+   */
+  getResults(): GameResult | null {
+    return this.getGameResult();
+  }
 }

@@ -1,7 +1,8 @@
 import { createServer } from 'http';
 import { AddressInfo } from 'net';
 import { Server as SocketIOServer } from 'socket.io';
-import { io as Client, Socket as ClientSocket } from 'socket.io-client';
+import Client from 'socket.io-client';
+type ClientSocket = any;
 import jwt from 'jsonwebtoken';
 import { createSocketServer } from '../../src/socket/socketServer';
 import { SOCKET_EVENTS } from '../../src/types/socket';
