@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import GameTable from '../components/GameTable';
-import { GameSnapshot, GamePhase, PlayerStatus, Suit, Rank } from '../types/game';
+import ActionPanel from '../components/ActionPanel';
+import ActionHistory from '../components/ActionHistory';
+import { GameSnapshot, GamePhase, PlayerStatus, Suit, Rank, PlayerAction } from '../types/game';
 
 const GamePage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -70,7 +72,7 @@ const GamePage: React.FC = () => {
           eligiblePlayers: ['user1', 'user2', 'user3']
         }
       ],
-      currentPlayerId: 'user2',
+      currentPlayerId: 'user1',
       actionHistory: [
         {
           playerId: 'user1',
@@ -116,9 +118,69 @@ const GamePage: React.FC = () => {
     setGameSnapshot(mockGameSnapshot);
   }, [roomId]);
 
-  const handlePlayerAction = (action: string, amount?: number) => {
+  const handlePlayerAction = (action: PlayerAction, amount?: number) => {
     console.log('Player action:', action, amount);
     // TODO: Implement WebSocket communication with backend
+    
+    // Mock action handling for testing
+    if (gameSnapshot && action) {
+      const updatedSnapshot = { ...gameSnapshot };
+      const currentPlayerIndex = updatedSnapshot.players.findIndex(p => p.id === 'user1');
+      
+      if (currentPlayerIndex !== -1) {
+        const player = updatedSnapshot.players[currentPlayerIndex];
+        
+        // Update player based on action
+        switch (action) {
+          case PlayerAction.FOLD:
+            player.status = PlayerStatus.FOLDED;
+            player.hasActed = true;
+            break;
+          case PlayerAction.CHECK:
+            player.hasActed = true;
+            break;
+          case PlayerAction.CALL: {
+            const callAmount = Math.max(...updatedSnapshot.players.map(p => p.currentBet)) - player.currentBet;
+            player.currentBet += callAmount;
+            player.chips -= callAmount;
+            player.hasActed = true;
+            break;
+          }
+          case PlayerAction.RAISE: {
+            if (amount) {
+              const raiseAmount = amount - player.currentBet;
+              player.currentBet = amount;
+              player.chips -= raiseAmount;
+              player.hasActed = true;
+            }
+            break;
+          }
+          case PlayerAction.ALL_IN:
+            player.currentBet += player.chips;
+            player.chips = 0;
+            player.status = PlayerStatus.ALL_IN;
+            player.hasActed = true;
+            break;
+        }
+        
+        player.lastAction = action;
+        
+        // Add to action history
+        updatedSnapshot.actionHistory.push({
+          playerId: 'user1',
+          action,
+          amount: amount || 0,
+          timestamp: Date.now(),
+          phase: updatedSnapshot.phase
+        });
+        
+        // Move to next player (simple mock logic)
+        const nextPlayerIndex = (currentPlayerIndex + 1) % updatedSnapshot.players.length;
+        updatedSnapshot.currentPlayerId = updatedSnapshot.players[nextPlayerIndex].id;
+        
+        setGameSnapshot(updatedSnapshot);
+      }
+    }
   };
 
   const handleLeaveGame = () => {
@@ -160,14 +222,39 @@ const GamePage: React.FC = () => {
         </div>
       </div>
 
-      {/* 游戏桌面 */}
-      <div className="h-[calc(100vh-120px)]">
-        <GameTable
-          gameSnapshot={gameSnapshot}
-          currentUserId="user1" // Mock current user ID
-          onPlayerAction={handlePlayerAction}
-          className="w-full h-full"
-        />
+      {/* 游戏区域 */}
+      <div className="flex h-[calc(100vh-120px)] gap-4">
+        {/* 左侧：操作历史 */}
+        <div className="w-80 flex-shrink-0">
+          <ActionHistory
+            actions={gameSnapshot.actionHistory}
+            players={gameSnapshot.players}
+            maxItems={15}
+            className="h-full"
+          />
+        </div>
+
+        {/* 中间：游戏桌面 */}
+        <div className="flex-1 flex flex-col">
+          <div className="flex-1">
+            <GameTable
+              gameSnapshot={gameSnapshot}
+              currentUserId="user1" // Mock current user ID
+              onPlayerAction={handlePlayerAction}
+              className="w-full h-full"
+            />
+          </div>
+          
+          {/* 底部：操作面板 */}
+          <div className="mt-4">
+            <ActionPanel
+              gameSnapshot={gameSnapshot}
+              currentUserId="user1" // Mock current user ID
+              onPlayerAction={handlePlayerAction}
+              className="w-full"
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

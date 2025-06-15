@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GameSnapshot, GamePhase, PHASE_NAMES, Card } from '../types/game';
+import { GameSnapshot, GamePhase, PHASE_NAMES, Card, PlayerAction } from '../types/game';
 import PlayerSeat from './PlayerSeat';
 import { PokerCards } from './PokerCards';
 import PotDisplay from './PotDisplay';
@@ -7,7 +7,7 @@ import PotDisplay from './PotDisplay';
 interface GameTableProps {
   gameSnapshot: GameSnapshot;
   currentUserId: string;
-  onPlayerAction?: (action: string, amount?: number) => void;
+  onPlayerAction?: (action: PlayerAction, amount?: number) => void;
   className?: string;
 }
 
