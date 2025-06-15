@@ -94,16 +94,24 @@ const LobbyPage = () => {
       return;
     }
 
+    setSocketError(null);
+
     try {
       const response = await socketJoinRoom(roomId, password);
       if (response.success) {
+        console.log('Successfully joined room via socket:', roomId);
+        // Navigate to game page
         navigate(`/game/${roomId}`);
       } else {
-        setSocketError(response.error || '加入房间失败');
+        const errorMessage = response.error || '加入房间失败';
+        setSocketError(errorMessage);
+        throw new Error(errorMessage);
       }
     } catch (error: any) {
       console.error('Join room failed:', error);
-      setSocketError(error.message || '加入房间失败');
+      const errorMessage = error.message || '加入房间失败';
+      setSocketError(errorMessage);
+      throw error; // Re-throw to let JoinRoomModal handle it
     }
   };
 
@@ -328,7 +336,7 @@ const LobbyPage = () => {
         isOpen={isJoinModalOpen}
         onClose={() => setIsJoinModalOpen(false)}
         roomId={selectedRoomId}
-        onJoinRoom={connected ? handleJoinRoom : undefined}
+        onJoinRoom={handleJoinRoom}
       />
     </div>
   );

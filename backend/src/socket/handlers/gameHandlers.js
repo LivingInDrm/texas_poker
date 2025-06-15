@@ -297,36 +297,40 @@ function setupGameHandlers(socket, io) {
 // 将游戏引擎状态转换为WebSocket格式
 function convertGameEngineToWebSocketState(gameEngine, roomId) {
     const engineState = gameEngine.getState();
+    const positions = engineState.positions || {};
+    const pots = engineState.pots || [];
+    const totalPot = pots.reduce((sum, pot) => sum + pot.amount, 0);
+    
     return {
         phase: engineState.phase,
         players: engineState.players.map((p) => ({
             id: p.id,
-            username: p.username,
+            username: p.name || p.username,
             chips: p.chips,
-            cards: p.cards.map((card) => card.toString()),
+            cards: (p.cards || []).map((card) => card.toString()),
             status: p.status,
             position: p.position,
             totalBet: p.totalBet,
             isConnected: true // 这里假设所有玩家都连接，实际应该从房间状态获取
         })),
-        dealerIndex: engineState.dealerIndex,
-        smallBlindIndex: engineState.smallBlindIndex,
-        bigBlindIndex: engineState.bigBlindIndex,
-        currentPlayerIndex: engineState.currentPlayerIndex,
-        board: engineState.board.map((card) => card.toString()),
-        pot: engineState.pot,
-        sidePots: engineState.sidePots.map((sp) => ({
-            amount: sp.amount,
-            eligiblePlayers: sp.eligiblePlayers
+        dealerIndex: positions.dealer || 0,
+        smallBlindIndex: positions.smallBlind || 0,
+        bigBlindIndex: positions.bigBlind || 0,
+        currentPlayerIndex: engineState.currentPlayerIndex || 0,
+        board: (engineState.communityCards || []).map((card) => card.toString()),
+        pot: totalPot,
+        sidePots: pots.map((pot) => ({
+            amount: pot.amount,
+            eligiblePlayers: pot.eligiblePlayers || []
         })),
-        currentBet: engineState.currentBet,
-        roundBets: engineState.roundBets,
-        history: engineState.history.map((h) => ({
+        currentBet: 0, // 从GameState中无法直接获取，需要计算
+        roundBets: {}, // 从GameState中无法直接获取，需要计算
+        history: (engineState.actionHistory || []).map((h) => ({
             playerId: h.playerId,
             action: {
-                type: h.action.type,
-                amount: h.action.amount,
-                timestamp: h.action.timestamp
+                type: h.action,
+                amount: h.amount || 0,
+                timestamp: h.timestamp
             },
             phase: h.phase,
             timestamp: h.timestamp

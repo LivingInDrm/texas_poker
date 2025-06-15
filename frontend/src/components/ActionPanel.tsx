@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { GameSnapshot, PlayerAction, GamePhase, ACTION_NAMES } from '../types/game';
 
 interface ActionPanelProps {
@@ -26,12 +26,29 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     showConfirmation: false
   });
 
-  const currentPlayer = gameSnapshot.players.find(p => p.id === currentUserId);
-  const isCurrentPlayerTurn = gameSnapshot.currentPlayerId === currentUserId;
-  const isGameActive = gameSnapshot.phase !== GamePhase.WAITING && gameSnapshot.phase !== GamePhase.FINISHED;
+  // 如果游戏快照不存在，不渲染组件
+  if (!gameSnapshot) {
+    return null;
+  }
+
+  const currentPlayer = gameSnapshot?.players?.find(p => p.id === currentUserId);
+  const isCurrentPlayerTurn = gameSnapshot?.currentPlayerId === currentUserId;
+  const isGameActive = gameSnapshot?.phase !== GamePhase.WAITING && gameSnapshot?.phase !== GamePhase.FINISHED;
+
+  // 计算最小加注金额
+  const getMinRaiseAmount = useCallback(() => {
+    if (!currentPlayer) return 0;
+    
+    const highestBet = gameSnapshot?.players?.length ? Math.max(...gameSnapshot.players.map(p => p.currentBet)) : 0;
+    const callAmount = highestBet - currentPlayer.currentBet;
+    
+    // 最小加注 = 跟注金额 + 大盲注
+    const bigBlind = 20; // 假设大盲注为20，实际应该从游戏配置获取
+    return callAmount + bigBlind;
+  }, [currentPlayer, gameSnapshot?.players]);
 
   // 计算有效的操作选项
-  const getAvailableActions = () => {
+  const getAvailableActions = useCallback(() => {
     if (!currentPlayer || !isCurrentPlayerTurn || !isGameActive) {
       return [];
     }
@@ -39,7 +56,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     const actions: PlayerAction[] = [PlayerAction.FOLD];
     
     // 计算当前最高下注和需要跟注的金额
-    const highestBet = Math.max(...gameSnapshot.players.map(p => p.currentBet));
+    const highestBet = gameSnapshot?.players?.length ? Math.max(...gameSnapshot.players.map(p => p.currentBet)) : 0;
     const callAmount = highestBet - currentPlayer.currentBet;
     
     // 如果没有人下注，可以过牌
@@ -64,26 +81,14 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
     }
     
     return actions;
-  };
-
-  // 计算最小加注金额
-  const getMinRaiseAmount = () => {
-    if (!currentPlayer) return 0;
-    
-    const highestBet = Math.max(...gameSnapshot.players.map(p => p.currentBet));
-    const callAmount = highestBet - currentPlayer.currentBet;
-    
-    // 最小加注 = 跟注金额 + 大盲注
-    const bigBlind = 20; // 假设大盲注为20，实际应该从游戏配置获取
-    return callAmount + bigBlind;
-  };
+  }, [currentPlayer, isCurrentPlayerTurn, isGameActive, gameSnapshot?.players, getMinRaiseAmount]);
 
   // 计算跟注金额
-  const getCallAmount = () => {
+  const getCallAmount = useCallback(() => {
     if (!currentPlayer) return 0;
-    const highestBet = Math.max(...gameSnapshot.players.map(p => p.currentBet));
+    const highestBet = gameSnapshot?.players?.length ? Math.max(...gameSnapshot.players.map(p => p.currentBet)) : 0;
     return highestBet - currentPlayer.currentBet;
-  };
+  }, [currentPlayer, gameSnapshot?.players]);
 
   // 初始化加注金额
   useEffect(() => {
@@ -93,7 +98,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
         raiseAmount: getMinRaiseAmount()
       }));
     }
-  }, [currentPlayer, gameSnapshot.players, getMinRaiseAmount]);
+  }, [currentPlayer, gameSnapshot?.players, getMinRaiseAmount]);
 
   // 处理操作按钮点击
   const handleActionClick = (action: PlayerAction) => {
@@ -325,9 +330,9 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
           </div>
         )}
         
-        {!isCurrentPlayerTurn && gameSnapshot.currentPlayerId && (
+        {!isCurrentPlayerTurn && gameSnapshot?.currentPlayerId && (
           <div className="text-center mt-2 text-gray-400">
-            等待 {gameSnapshot.players.find(p => p.id === gameSnapshot.currentPlayerId)?.name} 行动...
+            等待 {gameSnapshot?.players?.find(p => p.id === gameSnapshot?.currentPlayerId)?.name} 行动...
           </div>
         )}
       </div>

@@ -51,39 +51,58 @@ const GamePage: React.FC = () => {
   useEffect(() => {
     const initializeGame = async () => {
       if (!roomId || !user) {
+        console.log('GamePage: Missing roomId or user, redirecting to lobby');
         navigate('/lobby');
         return;
       }
 
+      console.log('GamePage: Initializing game for room:', roomId);
+
       // 确保Socket连接
       if (!connected) {
+        console.log('GamePage: Socket not connected, attempting to connect...');
         try {
           await connect();
+          console.log('GamePage: Successfully connected to socket');
         } catch (error) {
-          console.error('Failed to connect to socket:', error);
+          console.error('GamePage: Failed to connect to socket:', error);
           setError('无法连接到服务器');
           return;
         }
       }
 
-      // 加入房间
-      if (!currentRoom || currentRoom.id !== roomId) {
-        setIsJoiningRoom(true);
-        try {
-          await joinRoom(roomId);
-        } catch (error: any) {
-          console.error('Failed to join room:', error);
-          setError(error.message || '加入房间失败');
+      // 检查是否已经在正确的房间中
+      if (currentRoom && currentRoom.id === roomId) {
+        console.log('GamePage: Already in the correct room:', roomId);
+        setIsJoiningRoom(false);
+        return;
+      }
+
+      // 加入房间 - 只有在不在房间中或在错误房间中才加入
+      setIsJoiningRoom(true);
+      try {
+        console.log('GamePage: Attempting to join room:', roomId);
+        const response = await joinRoom(roomId);
+        if (response.success) {
+          console.log('GamePage: Successfully joined room:', roomId);
+        } else {
+          console.error('GamePage: Failed to join room:', response.error);
+          setError(response.error || '加入房间失败');
           navigate('/lobby');
           return;
-        } finally {
-          setIsJoiningRoom(false);
         }
+      } catch (error: any) {
+        console.error('GamePage: Failed to join room:', error);
+        setError(error.message || '加入房间失败');
+        navigate('/lobby');
+        return;
+      } finally {
+        setIsJoiningRoom(false);
       }
     };
 
     initializeGame();
-  }, [roomId, user, connected, currentRoom, connect, joinRoom, navigate]);
+  }, [roomId, user, connected, connect, joinRoom, navigate]);
 
   // 将Socket游戏状态转换为本地GameSnapshot格式
   useEffect(() => {
@@ -152,8 +171,8 @@ const GamePage: React.FC = () => {
     }
 
     try {
-      const socketAction = {
-        type: convertLocalActionToSocket(action),
+      const socketAction: PlayerAction = {
+        type: convertLocalActionToSocket(action) as 'fold' | 'check' | 'call' | 'raise' | 'allin',
         amount,
         timestamp: new Date()
       };
@@ -266,11 +285,13 @@ const GamePage: React.FC = () => {
   }
 
   // 错误状态
-  if (!currentRoom) {
+  if (!currentRoom && !isJoiningRoom) {
+    console.log('GamePage: No current room and not joining, showing error state');
     return (
       <div className="min-h-screen bg-green-800 flex items-center justify-center">
         <div className="text-white text-center">
           <p className="text-xl mb-4">房间不存在或已关闭</p>
+          <p className="text-sm mb-4 opacity-75">房间ID: {roomId}</p>
           <button
             onClick={() => navigate('/lobby')}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -282,8 +303,29 @@ const GamePage: React.FC = () => {
     );
   }
 
+  console.log('GamePage: Rendering with state:', {
+    roomId,
+    currentRoom: currentRoom?.id,
+    gameState: gameState?.gameId,
+    isInGame,
+    gameSnapshot: !!gameSnapshot,
+    isJoiningRoom
+  });
+
   return (
     <div className="min-h-screen bg-green-800 relative overflow-hidden">
+      {/* Debug info in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white p-2 rounded text-xs z-50">
+          <div>Room: {roomId}</div>
+          <div>Current Room: {currentRoom?.id || 'None'}</div>
+          <div>Game State: {gameState?.gameId || 'None'}</div>
+          <div>In Game: {isInGame ? 'Yes' : 'No'}</div>
+          <div>Game Snapshot: {gameSnapshot ? 'Available' : 'None'}</div>
+          <div>Players: {currentRoom?.players?.length || 0}</div>
+        </div>
+      )}
+
       {/* 网络状态指示器 */}
       <div className="absolute top-4 right-4 z-10">
         <NetworkIndicator
@@ -303,24 +345,36 @@ const GamePage: React.FC = () => {
       )}
 
       {/* 游戏桌面 */}
-      {gameSnapshot && (
+      {gameSnapshot ? (
         <GameTable
           gameSnapshot={gameSnapshot}
           currentUserId={user?.id || ''}
           onPlayerAction={handlePlayerAction}
           className="h-screen"
         />
-      )}
+      ) : currentRoom ? (
+        /* 房间存在但没有游戏快照时显示房间信息 */
+        <div className="flex items-center justify-center h-screen">
+          <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-8 text-white text-center max-w-md">
+            <h2 className="text-2xl font-bold mb-4">房间: {currentRoom.id}</h2>
+            <div className="space-y-2 mb-6">
+              <div>玩家: {currentRoom.players.length}/{currentRoom.maxPlayers}</div>
+              <div>状态: {currentRoom.status === 'WAITING' ? '等待中' : currentRoom.status === 'PLAYING' ? '游戏中' : '已结束'}</div>
+              <div>盲注: {currentRoom.smallBlind}/{currentRoom.bigBlind}</div>
+            </div>
+            <div className="text-sm opacity-75">
+              {currentRoom.gameStarted ? '游戏正在加载...' : '等待游戏开始'}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* 操作面板 */}
       {gameSnapshot && isInGame && isMyTurn && (
         <ActionPanel
-          currentBet={gameSnapshot.currentPlayerId ? 
-            gameSnapshot.players.find(p => p.id === gameSnapshot.currentPlayerId)?.currentBet || 0 : 0
-          }
-          maxBet={myPlayer?.chips || 0}
-          minRaise={Math.max(...gameSnapshot.players.map(p => p.currentBet)) + 10}
-          onAction={handlePlayerAction}
+          gameSnapshot={gameSnapshot}
+          currentUserId={user?.id || ''}
+          onPlayerAction={handlePlayerAction}
           className="absolute bottom-4 left-1/2 transform -translate-x-1/2"
         />
       )}

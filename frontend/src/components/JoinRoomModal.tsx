@@ -5,9 +5,10 @@ interface JoinRoomModalProps {
   isOpen: boolean;
   onClose: () => void;
   roomId: string;
+  onJoinRoom?: (roomId: string, password?: string) => Promise<void>;
 }
 
-const JoinRoomModal = ({ isOpen, onClose, roomId }: JoinRoomModalProps) => {
+const JoinRoomModal = ({ isOpen, onClose, roomId, onJoinRoom }: JoinRoomModalProps) => {
   const { rooms, joinRoom, isLoading } = useRoomStore();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -36,19 +37,24 @@ const JoinRoomModal = ({ isOpen, onClose, roomId }: JoinRoomModalProps) => {
     }
 
     try {
-      await joinRoom({
-        roomId,
-        password: password.trim() || undefined,
-      });
+      // Use socket-based join if available, otherwise fall back to API
+      if (onJoinRoom) {
+        await onJoinRoom(roomId, password.trim() || undefined);
+      } else {
+        await joinRoom({
+          roomId,
+          password: password.trim() || undefined,
+        });
+      }
       
       // Clear form and close modal
       setPassword('');
       onClose();
       
-      // TODO: Navigate to game room
       console.log('Successfully joined room:', roomId);
-    } catch (error) {
-      // Error is handled by the store, but we can also show it here
+    } catch (error: any) {
+      console.error('Join room error:', error);
+      setError(error.message || '加入房间失败');
     }
   };
 
