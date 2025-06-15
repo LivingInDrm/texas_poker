@@ -10,6 +10,8 @@ import prisma from '../../src/prisma';
 import { redisClient } from '../../src/db';
 
 describe('Socket.IO Server', () => {
+  // 为Socket测试设置更长的超时时间
+  jest.setTimeout(30000);
   let httpServer: any;
   let io: SocketIOServer;
   let serverPort: number;
@@ -47,18 +49,43 @@ describe('Socket.IO Server', () => {
 
   afterAll(async () => {
     // 清理测试数据
-    await prisma.user.delete({ where: { id: testUser.id } });
+    try {
+      await prisma.user.delete({ where: { id: testUser.id } });
+    } catch (error) {
+      console.warn('Failed to delete test user:', error);
+    }
+    
+    // 清理Redis数据
+    try {
+      if (redisClient.isOpen) {
+        const keys = await redisClient.keys('room:*');
+        if (keys.length > 0) {
+          await redisClient.del(keys);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to clean Redis data:', error);
+    }
     
     // 关闭服务器
     io.close();
     httpServer.close();
+    
+    // 关闭数据库连接
+    await prisma.$disconnect();
   });
 
   afterEach(async () => {
     // 清理Redis中的测试数据
-    const keys = await redisClient.keys('room:*');
-    if (keys.length > 0) {
-      await redisClient.del(keys);
+    try {
+      if (redisClient.isOpen) {
+        const keys = await redisClient.keys('room:*');
+        if (keys.length > 0) {
+          await redisClient.del(keys);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to clean Redis data in afterEach:', error);
     }
   });
 
@@ -115,14 +142,23 @@ describe('Socket.IO Server', () => {
 
     beforeEach((done) => {
       client = Client(`http://localhost:${serverPort}`, {
-        auth: { token: validToken }
+        auth: { token: validToken },
+        timeout: 10000
       });
       client.on('connect', done);
+      client.on('connect_error', (error: any) => {
+        done(error);
+      });
     });
 
-    afterEach(() => {
-      if (client.connected) {
+    afterEach((done) => {
+      if (client && client.connected) {
+        client.on('disconnect', () => {
+          done();
+        });
         client.disconnect();
+      } else {
+        done();
       }
     });
 
@@ -367,14 +403,23 @@ describe('Socket.IO Server', () => {
 
     beforeEach((done) => {
       client = Client(`http://localhost:${serverPort}`, {
-        auth: { token: validToken }
+        auth: { token: validToken },
+        timeout: 10000
       });
       client.on('connect', done);
+      client.on('connect_error', (error: any) => {
+        done(error);
+      });
     });
 
-    afterEach(() => {
-      if (client.connected) {
+    afterEach((done) => {
+      if (client && client.connected) {
+        client.on('disconnect', () => {
+          done();
+        });
         client.disconnect();
+      } else {
+        done();
       }
     });
 

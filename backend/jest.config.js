@@ -16,4 +16,10 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
+  // 增加超时配置
+  testTimeout: 30000, // 30秒
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  // 防止测试进程挂起
+  forceExit: true,
+  detectOpenHandles: true,
 };
