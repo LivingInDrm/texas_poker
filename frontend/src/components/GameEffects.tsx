@@ -45,39 +45,6 @@ export const GameSoundEffects: React.FC<GameSoundEffectsProps> = ({ enabled }) =
     };
   }, [enabled]);
 
-  const playTone = (frequency: number, duration: number, type: OscillatorType = 'sine') => {
-    if (!enabled || !audioContext.current) return;
-
-    const oscillator = audioContext.current.createOscillator();
-    const gainNode = audioContext.current.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.current.destination);
-
-    oscillator.frequency.setValueAtTime(frequency, audioContext.current.currentTime);
-    oscillator.type = type;
-
-    gainNode.gain.setValueAtTime(0.1, audioContext.current.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.current.currentTime + duration);
-
-    oscillator.start(audioContext.current.currentTime);
-    oscillator.stop(audioContext.current.currentTime + duration);
-  };
-
-  // 暴露音效方法给外部使用
-  React.useImperativeHandle(GameSoundEffects, () => ({
-    playCardFlip: () => playTone(800, 0.1, 'square'),
-    playChipDrop: () => playTone(400, 0.2, 'triangle'),
-    playWinSound: () => {
-      playTone(523, 0.3, 'sine'); // C5
-      setTimeout(() => playTone(659, 0.3, 'sine'), 100); // E5
-      setTimeout(() => playTone(784, 0.5, 'sine'), 200); // G5
-    },
-    playLoseSound: () => playTone(220, 0.5, 'triangle'),
-    playButtonClick: () => playTone(1000, 0.05, 'square'),
-    playNotification: () => playTone(600, 0.15, 'sine')
-  }));
-
   return null;
 };
 
@@ -132,7 +99,7 @@ export const ConfettiEffect: React.FC<ConfettiEffectProps> = ({
     }
   }, [isVisible, duration, onComplete]);
 
-  if (!isVisible || particles.length === 0) return null;
+  if (!isVisible) return null;
 
   return (
     <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
@@ -147,19 +114,13 @@ export const ConfettiEffect: React.FC<ConfettiEffectProps> = ({
             height: particle.size,
             backgroundColor: particle.color,
             transform: `rotate(${particle.rotation}deg)`,
-            animation: `fall-${particle.id} ${duration}ms linear forwards`,
+            transition: 'transform 3s linear',
+            animationDuration: `${duration}ms`,
+            animationTimingFunction: 'linear',
+            animationFillMode: 'forwards'
           }}
         />
       ))}
-      <style jsx>{`
-        ${particles.map(particle => `
-          @keyframes fall-${particle.id} {
-            to {
-              transform: translate(${particle.vx * 100}px, ${window.innerHeight + 50}px) rotate(${particle.rotation + particle.rotationSpeed * 100}deg);
-            }
-          }
-        `).join('')}
-      `}</style>
     </div>
   );
 };

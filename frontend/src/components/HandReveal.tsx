@@ -40,7 +40,13 @@ export const HandReveal: React.FC<HandRevealProps> = ({
   }, [isVisible, animationDelay]);
 
   const revealCardsSequentially = () => {
-    if (cards.length === 0) return;
+    if (cards.length === 0) {
+      // 如果没有卡片，直接调用完成回调
+      if (onRevealComplete) {
+        setTimeout(onRevealComplete, 100);
+      }
+      return;
+    }
 
     const revealNextCard = (index: number) => {
       if (index < cards.length) {
@@ -179,12 +185,24 @@ export const AllHandsReveal: React.FC<AllHandsRevealProps> = ({
     }
   }, [isVisible, revealStarted]);
 
+  // 专门处理空玩家情况的useEffect
+  useEffect(() => {
+    if (isVisible && revealStarted && activePlayers.length === 0) {
+      if (onRevealComplete) {
+        const timer = setTimeout(onRevealComplete, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isVisible, revealStarted, activePlayers.length, onRevealComplete]);
+
   const handlePlayerRevealComplete = () => {
-    if (currentPlayerIndex < activePlayers.length - 1) {
+    const nextIndex = currentPlayerIndex + 1;
+    if (nextIndex < activePlayers.length) {
       setTimeout(() => {
-        setCurrentPlayerIndex(prev => prev + 1);
+        setCurrentPlayerIndex(nextIndex);
       }, 500);
     } else {
+      // 所有玩家都已展示完成
       if (onRevealComplete) {
         setTimeout(onRevealComplete, 1000);
       }

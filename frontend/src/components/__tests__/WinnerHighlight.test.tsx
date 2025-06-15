@@ -190,7 +190,7 @@ describe('WinnerAnimationSequence', () => {
     
     // Fast-forward through all winners
     act(() => {
-      vi.advanceTimersByTime(7000); // 3 seconds per winner + buffer
+      vi.advanceTimersByTime(7100); // 3.5 seconds per winner * 2 + buffer
     });
     
     expect(mockProps.onSequenceComplete).toHaveBeenCalledTimes(1);

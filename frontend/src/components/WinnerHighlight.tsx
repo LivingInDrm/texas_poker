@@ -104,7 +104,7 @@ export const ChipAnimation: React.FC<ChipAnimationProps> = ({
   const [animationStarted, setAnimationStarted] = useState(false);
 
   useEffect(() => {
-    if (isVisible && !animationStarted) {
+    if (isVisible) {
       setAnimationStarted(true);
       const timer = setTimeout(() => {
         if (onAnimationComplete) {
@@ -112,8 +112,10 @@ export const ChipAnimation: React.FC<ChipAnimationProps> = ({
         }
       }, 1500);
       return () => clearTimeout(timer);
+    } else {
+      setAnimationStarted(false);
     }
-  }, [isVisible, animationStarted, onAnimationComplete]);
+  }, [isVisible, onAnimationComplete]);
 
   if (!isVisible) return null;
 
@@ -186,6 +188,15 @@ export const WinnerAnimationSequence: React.FC<WinnerAnimationSequenceProps> = (
       return;
     }
 
+    // 如果没有获胜者，立即调用完成回调
+    if (winners.length === 0) {
+      if (onSequenceComplete) {
+        setTimeout(onSequenceComplete, 50);
+      }
+      return;
+    }
+
+    // 如果已经完成所有winners，调用完成回调
     if (currentWinnerIndex >= winners.length) {
       if (onSequenceComplete) {
         onSequenceComplete();
@@ -193,22 +204,22 @@ export const WinnerAnimationSequence: React.FC<WinnerAnimationSequenceProps> = (
       return;
     }
 
-    // Show winner highlight first
-    const highlightTimer = setTimeout(() => {
-      setShowChipAnimation(true);
-    }, 1000);
-
-    // Move to next winner after chip animation
-    const nextWinnerTimer = setTimeout(() => {
-      setCurrentWinnerIndex(prev => prev + 1);
+    // 每个winner的完整动画周期约3.5秒
+    const winnerAnimationDuration = 3500; 
+    
+    const timer = setTimeout(() => {
+      const nextIndex = currentWinnerIndex + 1;
+      setCurrentWinnerIndex(nextIndex);
       setShowChipAnimation(false);
-    }, 3000);
+      
+      // 如果这是最后一个winner，在下一次effect运行时会调用onSequenceComplete
+    }, winnerAnimationDuration);
 
     return () => {
-      clearTimeout(highlightTimer);
-      clearTimeout(nextWinnerTimer);
+      clearTimeout(timer);
     };
   }, [isVisible, currentWinnerIndex, winners.length, onSequenceComplete]);
+
 
   if (!isVisible || currentWinnerIndex >= winners.length) return null;
 
@@ -235,14 +246,12 @@ export const WinnerAnimationSequence: React.FC<WinnerAnimationSequenceProps> = (
       </div>
 
       {/* Chip animation from pot to winner */}
-      {showChipAnimation && (
-        <ChipAnimation
-          fromPosition={potPosition}
-          toPosition={currentWinner.seatPosition}
-          amount={currentWinner.winAmount}
-          isVisible={true}
-        />
-      )}
+      <ChipAnimation
+        fromPosition={potPosition}
+        toPosition={currentWinner.seatPosition}
+        amount={currentWinner.winAmount}
+        isVisible={true}
+      />
     </>
   );
 };

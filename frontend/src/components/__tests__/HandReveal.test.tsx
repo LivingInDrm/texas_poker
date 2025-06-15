@@ -223,9 +223,25 @@ describe('AllHandsReveal', () => {
   it('should call onRevealComplete after all players revealed', () => {
     render(<AllHandsReveal {...mockProps} />);
     
-    // Fast-forward through all reveals
+    // 使用分步时间推进来调试问题
+    // 第一步：推进到第一个玩家完成
     act(() => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(2000); // Alice的动画时间
+    });
+    
+    // 第二步：推进切换时间
+    act(() => {
+      vi.advanceTimersByTime(1000); // 切换延迟
+    });
+    
+    // 第三步：推进到第二个玩家完成
+    act(() => {
+      vi.advanceTimersByTime(2000); // Bob的动画时间
+    });
+    
+    // 第四步：推进最终回调
+    act(() => {
+      vi.advanceTimersByTime(2000); // 最终回调延迟
     });
     
     expect(mockProps.onRevealComplete).toHaveBeenCalledTimes(1);
