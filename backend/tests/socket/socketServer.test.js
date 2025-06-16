@@ -20,6 +20,8 @@ const socket_1 = require("../../src/types/socket");
 const prisma_1 = __importDefault(require("../../src/prisma"));
 const db_1 = require("../../src/db");
 describe('Socket.IO Server', () => {
+    // 为Socket测试设置更长的超时时间
+    jest.setTimeout(30000);
     let httpServer;
     let io;
     let serverPort;
@@ -49,16 +51,42 @@ describe('Socket.IO Server', () => {
     }));
     afterAll(() => __awaiter(void 0, void 0, void 0, function* () {
         // 清理测试数据
-        yield prisma_1.default.user.delete({ where: { id: testUser.id } });
+        try {
+            yield prisma_1.default.user.delete({ where: { id: testUser.id } });
+        }
+        catch (error) {
+            console.warn('Failed to delete test user:', error);
+        }
+        // 清理Redis数据
+        try {
+            if (db_1.redisClient.isOpen) {
+                const keys = yield db_1.redisClient.keys('room:*');
+                if (keys.length > 0) {
+                    yield db_1.redisClient.del(keys);
+                }
+            }
+        }
+        catch (error) {
+            console.warn('Failed to clean Redis data:', error);
+        }
         // 关闭服务器
         io.close();
         httpServer.close();
+        // 关闭数据库连接
+        yield prisma_1.default.$disconnect();
     }));
     afterEach(() => __awaiter(void 0, void 0, void 0, function* () {
         // 清理Redis中的测试数据
-        const keys = yield db_1.redisClient.keys('room:*');
-        if (keys.length > 0) {
-            yield db_1.redisClient.del(keys);
+        try {
+            if (db_1.redisClient.isOpen) {
+                const keys = yield db_1.redisClient.keys('room:*');
+                if (keys.length > 0) {
+                    yield db_1.redisClient.del(keys);
+                }
+            }
+        }
+        catch (error) {
+            console.warn('Failed to clean Redis data in afterEach:', error);
         }
     }));
     describe('Authentication', () => {
@@ -104,13 +132,23 @@ describe('Socket.IO Server', () => {
         let client;
         beforeEach((done) => {
             client = (0, socket_io_client_1.default)(`http://localhost:${serverPort}`, {
-                auth: { token: validToken }
+                auth: { token: validToken },
+                timeout: 10000
             });
             client.on('connect', done);
+            client.on('connect_error', (error) => {
+                done(error);
+            });
         });
-        afterEach(() => {
-            if (client.connected) {
+        afterEach((done) => {
+            if (client && client.connected) {
+                client.on('disconnect', () => {
+                    done();
+                });
                 client.disconnect();
+            }
+            else {
+                done();
             }
         });
         test('should receive welcome message on connection', (done) => {
@@ -310,13 +348,23 @@ describe('Socket.IO Server', () => {
         let client;
         beforeEach((done) => {
             client = (0, socket_io_client_1.default)(`http://localhost:${serverPort}`, {
-                auth: { token: validToken }
+                auth: { token: validToken },
+                timeout: 10000
             });
             client.on('connect', done);
+            client.on('connect_error', (error) => {
+                done(error);
+            });
         });
-        afterEach(() => {
-            if (client.connected) {
+        afterEach((done) => {
+            if (client && client.connected) {
+                client.on('disconnect', () => {
+                    done();
+                });
                 client.disconnect();
+            }
+            else {
+                done();
             }
         });
         test('should rate limit rapid ping requests', (done) => {

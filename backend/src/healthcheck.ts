@@ -1,5 +1,5 @@
 // 健康检查脚本
-import { createConnection } from './db';
+import { redisClient } from './db';
 import prisma from './prisma';
 
 async function healthCheck() {
@@ -8,9 +8,7 @@ async function healthCheck() {
     await prisma.$queryRaw`SELECT 1`;
     
     // 检查Redis连接
-    const redis = createConnection();
-    await redis.ping();
-    await redis.disconnect();
+    await redisClient.ping();
     
     console.log('Health check passed');
     process.exit(0);

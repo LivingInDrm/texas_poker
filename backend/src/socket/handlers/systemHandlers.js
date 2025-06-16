@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupSystemHandlers = setupSystemHandlers;
 const socket_1 = require("../../types/socket");
 const validation_1 = require("../middleware/validation");
+const userStateService_1 = require("../../services/userStateService");
 function setupSystemHandlers(socket, io) {
     // 添加通用消息速率验证
     const originalEmit = socket.emit;
@@ -44,6 +45,8 @@ function setupSystemHandlers(socket, io) {
                         // 重新加入房间
                         yield socket.join(roomId);
                         socket.data.roomId = roomId;
+                        // 更新全局用户状态
+                        yield userStateService_1.userStateService.setUserCurrentRoom(userId, roomId);
                         // 标记为已连接
                         player.isConnected = true;
                         yield redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));

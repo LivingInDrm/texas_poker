@@ -7,6 +7,7 @@ import prisma from './prisma';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import roomRoutes from './routes/room';
+import adminRoutes from './routes/admin';
 import { createSocketServer } from './socket/socketServer';
 
 dotenv.config();
@@ -22,6 +23,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/room', roomRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {

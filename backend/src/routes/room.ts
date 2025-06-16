@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import prisma from '../prisma';
 import { redisClient } from '../db';
+import { userStateService } from '../services/userStateService';
 
 const router = express.Router();
 
@@ -68,6 +69,9 @@ router.post('/create', authenticateToken, async (req: Request, res: Response) =>
     };
 
     await redisClient.setEx(`room:${room.id}`, 3600, JSON.stringify(roomState)); // 1小时过期
+    
+    // 设置用户全局状态
+    await userStateService.setUserCurrentRoom(userId, room.id);
 
     res.status(201).json({
       message: 'Room created successfully',
@@ -182,6 +186,15 @@ router.post('/join', authenticateToken, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Room ID is required' });
     }
 
+    // 检查用户是否已在其他房间
+    const currentRoomId = await userStateService.getUserCurrentRoom(userId);
+    if (currentRoomId && currentRoomId !== roomId) {
+      return res.status(400).json({ 
+        error: 'You are already in another room. Please leave it first.',
+        currentRoom: currentRoomId
+      });
+    }
+
     // 检查房间是否存在
     const room = await prisma.room.findUnique({
       where: { id: roomId },
@@ -260,6 +273,9 @@ router.post('/join', authenticateToken, async (req: Request, res: Response) => {
 
     // 更新 Redis
     await redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
+    
+    // 设置用户全局状态
+    await userStateService.setUserCurrentRoom(userId, roomId);
 
     res.json({
       message: 'Joined room successfully',
@@ -314,6 +330,9 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
 
     // 从 Redis 删除房间状态
     await redisClient.del(`room:${roomId}`);
+    
+    // 清除房主的全局状态
+    await userStateService.clearUserCurrentRoom(userId);
 
     res.json({ message: 'Room deleted successfully' });
   } catch (error) {

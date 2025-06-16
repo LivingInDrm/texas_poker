@@ -21,6 +21,7 @@ const prisma_1 = __importDefault(require("./prisma"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const user_1 = __importDefault(require("./routes/user"));
 const room_1 = __importDefault(require("./routes/room"));
+const admin_1 = __importDefault(require("./routes/admin"));
 const socketServer_1 = require("./socket/socketServer");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -32,6 +33,7 @@ app.use(express_1.default.json());
 app.use('/api/auth', auth_1.default);
 app.use('/api/user', user_1.default);
 app.use('/api/room', room_1.default);
+app.use('/api/admin', admin_1.default);
 app.get('/api/health', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const pgResult = yield db_1.pgClient.query('SELECT NOW()');

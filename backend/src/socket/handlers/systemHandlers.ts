@@ -8,6 +8,7 @@ import {
   SOCKET_EVENTS
 } from '../../types/socket';
 import { validationMiddleware } from '../middleware/validation';
+import { userStateService } from '../../services/userStateService';
 
 export function setupSystemHandlers(
   socket: AuthenticatedSocket,
@@ -50,6 +51,9 @@ export function setupSystemHandlers(
             // 重新加入房间
             await socket.join(roomId);
             socket.data.roomId = roomId;
+            
+            // 更新全局用户状态
+            await userStateService.setUserCurrentRoom(userId, roomId);
             
             // 标记为已连接
             player.isConnected = true;

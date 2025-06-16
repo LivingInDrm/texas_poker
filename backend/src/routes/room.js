@@ -16,6 +16,7 @@ const express_1 = __importDefault(require("express"));
 const auth_1 = require("../middleware/auth");
 const prisma_1 = __importDefault(require("../prisma"));
 const db_1 = require("../db");
+const userStateService_1 = require("../services/userStateService");
 const router = express_1.default.Router();
 // 创建房间
 router.post('/create', auth_1.authenticateToken, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -75,6 +76,8 @@ router.post('/create', auth_1.authenticateToken, (req, res) => __awaiter(void 0,
             createdAt: new Date().toISOString()
         };
         yield db_1.redisClient.setEx(`room:${room.id}`, 3600, JSON.stringify(roomState)); // 1小时过期
+        // 设置用户全局状态
+        yield userStateService_1.userStateService.setUserCurrentRoom(userId, room.id);
         res.status(201).json({
             message: 'Room created successfully',
             room: {
@@ -178,6 +181,14 @@ router.post('/join', auth_1.authenticateToken, (req, res) => __awaiter(void 0, v
         if (!roomId) {
             return res.status(400).json({ error: 'Room ID is required' });
         }
+        // 检查用户是否已在其他房间
+        const currentRoomId = yield userStateService_1.userStateService.getUserCurrentRoom(userId);
+        if (currentRoomId && currentRoomId !== roomId) {
+            return res.status(400).json({
+                error: 'You are already in another room. Please leave it first.',
+                currentRoom: currentRoomId
+            });
+        }
         // 检查房间是否存在
         const room = yield prisma_1.default.room.findUnique({
             where: { id: roomId },
@@ -248,6 +259,8 @@ router.post('/join', auth_1.authenticateToken, (req, res) => __awaiter(void 0, v
         roomState.currentPlayers += 1;
         // 更新 Redis
         yield db_1.redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
+        // 设置用户全局状态
+        yield userStateService_1.userStateService.setUserCurrentRoom(userId, roomId);
         res.json({
             message: 'Joined room successfully',
             room: {
@@ -296,6 +309,8 @@ router.delete('/:id', auth_1.authenticateToken, (req, res) => __awaiter(void 0, 
         });
         // 从 Redis 删除房间状态
         yield db_1.redisClient.del(`room:${roomId}`);
+        // 清除房主的全局状态
+        yield userStateService_1.userStateService.clearUserCurrentRoom(userId);
         res.json({ message: 'Room deleted successfully' });
     }
     catch (error) {

@@ -168,7 +168,7 @@ export function setupGameHandlers(
       
       // 验证是否轮到该玩家
       const currentPlayerId = gameEngine.getCurrentPlayerId();
-      const currentPlayer = currentPlayerId ? gameEngine.getGameSnapshot().players.find(p => p.id === currentPlayerId) : null;
+      const currentPlayer = currentPlayerId ? gameEngine.getGameSnapshot().players.find((p: any) => p.id === currentPlayerId) : null;
       if (!currentPlayer || currentPlayer.id !== userId) {
         return callback({
           success: false,
@@ -266,7 +266,7 @@ export function setupGameHandlers(
       } else {
         // 通知下一个玩家行动
         const nextPlayerId = gameEngine.getCurrentPlayerId();
-        const nextPlayer = nextPlayerId ? gameEngine.getGameSnapshot().players.find(p => p.id === nextPlayerId) : null;
+        const nextPlayer = nextPlayerId ? gameEngine.getGameSnapshot().players.find((p: any) => p.id === nextPlayerId) : null;
         if (nextPlayer) {
           const validActions = gameEngine.getValidActions(nextPlayer.id);
           io.to(roomId).emit(SOCKET_EVENTS.GAME_ACTION_REQUIRED, {

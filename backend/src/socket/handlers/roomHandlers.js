@@ -18,6 +18,7 @@ const socket_1 = require("../../types/socket");
 const db_1 = require("../../db");
 const prisma_1 = __importDefault(require("../../prisma"));
 const validation_1 = require("../middleware/validation");
+const userStateService_1 = require("../../services/userStateService");
 function setupRoomHandlers(socket, io) {
     // 加入房间
     socket.on(socket_1.SOCKET_EVENTS.ROOM_JOIN, (data, callback) => __awaiter(this, void 0, void 0, function* () {
@@ -31,6 +32,15 @@ function setupRoomHandlers(socket, io) {
                     success: false,
                     error: validationResult.error || 'Invalid join request',
                     message: validationResult.error || 'Validation failed'
+                });
+            }
+            // 检查并处理多房间冲突
+            const conflictResult = yield userStateService_1.userStateService.checkAndHandleRoomConflict(userId, roomId, socket, io);
+            if (!conflictResult.canJoin) {
+                return callback({
+                    success: false,
+                    error: conflictResult.error || 'Cannot join room due to conflict',
+                    message: conflictResult.error || 'Room conflict detected'
                 });
             }
             // 检查房间是否存在
@@ -91,6 +101,8 @@ function setupRoomHandlers(socket, io) {
                 roomState.players[existingPlayerIndex].isConnected = true;
                 yield socket.join(roomId);
                 socket.data.roomId = roomId;
+                // 更新全局用户状态
+                yield userStateService_1.userStateService.setUserCurrentRoom(userId, roomId);
                 // 保存房间状态
                 yield db_1.redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
                 // 发送成功响应
@@ -142,6 +154,8 @@ function setupRoomHandlers(socket, io) {
             // 更新房间状态
             roomState.players.push(newPlayer);
             roomState.currentPlayerCount = roomState.players.length;
+            // 更新全局用户状态
+            yield userStateService_1.userStateService.setUserCurrentRoom(userId, roomId);
             // 保存房间状态
             yield db_1.redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
             // 发送成功响应
@@ -194,6 +208,8 @@ function setupRoomHandlers(socket, io) {
             // 离开socket房间
             yield socket.leave(roomId);
             socket.data.roomId = undefined;
+            // 清除全局用户状态
+            yield userStateService_1.userStateService.clearUserCurrentRoom(userId);
             // 移除玩家
             const removedPlayer = roomState.players[playerIndex];
             roomState.players.splice(playerIndex, 1);
@@ -251,6 +267,19 @@ function setupRoomHandlers(socket, io) {
     socket.on(socket_1.SOCKET_EVENTS.ROOM_QUICK_START, (callback) => __awaiter(this, void 0, void 0, function* () {
         const { userId, username } = socket.data;
         try {
+            // 首先检查用户是否已在其他房间
+            const currentRoomId = yield userStateService_1.userStateService.getUserCurrentRoom(userId);
+            if (currentRoomId) {
+                // 强制离开当前房间
+                const leaveResult = yield userStateService_1.userStateService.forceLeaveCurrentRoom(userId, socket, io, 'Starting quick game');
+                if (!leaveResult.success) {
+                    return callback({
+                        success: false,
+                        error: leaveResult.error || 'Failed to leave current room',
+                        message: 'Cannot start quick game'
+                    });
+                }
+            }
             // 查找可用的房间
             const availableRooms = yield prisma_1.default.room.findMany({
                 where: {
@@ -344,6 +373,8 @@ function setupRoomHandlers(socket, io) {
             // 加入socket房间
             yield socket.join(targetRoom.id);
             socket.data.roomId = targetRoom.id;
+            // 更新全局用户状态
+            yield userStateService_1.userStateService.setUserCurrentRoom(userId, targetRoom.id);
             // 保存房间状态
             yield db_1.redisClient.setEx(`room:${targetRoom.id}`, 3600, JSON.stringify(roomState));
             // 发送成功响应

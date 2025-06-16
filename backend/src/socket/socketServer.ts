@@ -13,6 +13,7 @@ import {
 import { setupRoomHandlers } from './handlers/roomHandlers';
 import { setupGameHandlers } from './handlers/gameHandlers';
 import { setupSystemHandlers } from './handlers/systemHandlers';
+import { userStateService } from '../services/userStateService';
 import prisma from '../prisma';
 
 // 创建Socket.IO服务器
@@ -123,7 +124,7 @@ async function handlePlayerDisconnect(
 ) {
   const { roomId, userId } = socket.data;
   
-  if (!roomId) return;
+  if (!roomId || !userId) return;
 
   try {
     // 从Redis获取房间状态
@@ -139,7 +140,7 @@ async function handlePlayerDisconnect(
         roomState.players[playerIndex].isConnected = false;
         
         // 保存更新的房间状态
-        await redisClient.set(`room:${roomId}`, JSON.stringify(roomState), 'EX', 3600);
+        await redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
         
         // 通知房间内其他玩家
         socket.to(roomId).emit(SOCKET_EVENTS.ROOM_STATE_UPDATE, {
@@ -147,10 +148,27 @@ async function handlePlayerDisconnect(
         });
         
         console.log(`Player ${socket.data.username} disconnected from room ${roomId}`);
+        
+        // 注意：我们不立即清除全局用户状态，因为用户可能会重连
+        // 全局用户状态会在用户明确离开房间或重连超时后清除
+      } else {
+        // 如果用户不在房间中，清除全局状态
+        await userStateService.clearUserCurrentRoom(userId);
+        console.log(`Cleared orphaned user state for ${socket.data.username}`);
       }
+    } else {
+      // 如果房间不存在，清除全局用户状态
+      await userStateService.clearUserCurrentRoom(userId);
+      console.log(`Cleared user state for non-existent room ${roomId}`);
     }
   } catch (error) {
     console.error('Error handling player disconnect:', error);
+    // 在错误情况下也尝试清除用户状态，防止状态泄漏
+    try {
+      await userStateService.clearUserCurrentRoom(userId);
+    } catch (cleanupError) {
+      console.error('Error cleaning up user state after disconnect error:', cleanupError);
+    }
   }
 }
 

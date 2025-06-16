@@ -15,6 +15,7 @@ import {
 import { redisClient } from '../../db';
 import prisma from '../../prisma';
 import { validationMiddleware } from '../middleware/validation';
+import { userStateService } from '../../services/userStateService';
 
 export function setupRoomHandlers(
   socket: AuthenticatedSocket,
@@ -33,6 +34,16 @@ export function setupRoomHandlers(
           success: false,
           error: validationResult.error || 'Invalid join request',
           message: validationResult.error || 'Validation failed'
+        });
+      }
+
+      // 检查并处理多房间冲突
+      const conflictResult = await userStateService.checkAndHandleRoomConflict(userId, roomId, socket, io);
+      if (!conflictResult.canJoin) {
+        return callback({
+          success: false,
+          error: conflictResult.error || 'Cannot join room due to conflict',
+          message: conflictResult.error || 'Room conflict detected'
         });
       }
       // 检查房间是否存在
@@ -100,6 +111,9 @@ export function setupRoomHandlers(
         await socket.join(roomId);
         socket.data.roomId = roomId;
         
+        // 更新全局用户状态
+        await userStateService.setUserCurrentRoom(userId, roomId);
+        
         // 保存房间状态
         await redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
         
@@ -161,6 +175,9 @@ export function setupRoomHandlers(
       // 更新房间状态
       roomState.players.push(newPlayer);
       roomState.currentPlayerCount = roomState.players.length;
+      
+      // 更新全局用户状态
+      await userStateService.setUserCurrentRoom(userId, roomId);
       
       // 保存房间状态
       await redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
@@ -225,6 +242,9 @@ export function setupRoomHandlers(
       // 离开socket房间
       await socket.leave(roomId);
       socket.data.roomId = undefined;
+
+      // 清除全局用户状态
+      await userStateService.clearUserCurrentRoom(userId);
 
       // 移除玩家
       const removedPlayer = roomState.players[playerIndex];
@@ -293,6 +313,25 @@ export function setupRoomHandlers(
     const { userId, username } = socket.data;
 
     try {
+      // 首先检查用户是否已在其他房间
+      const currentRoomId = await userStateService.getUserCurrentRoom(userId);
+      if (currentRoomId) {
+        // 强制离开当前房间
+        const leaveResult = await userStateService.forceLeaveCurrentRoom(
+          userId,
+          socket,
+          io,
+          'Starting quick game'
+        );
+        
+        if (!leaveResult.success) {
+          return callback({
+            success: false,
+            error: leaveResult.error || 'Failed to leave current room',
+            message: 'Cannot start quick game'
+          });
+        }
+      }
       // 查找可用的房间
       const availableRooms = await prisma.room.findMany({
         where: {
@@ -396,6 +435,9 @@ export function setupRoomHandlers(
       // 加入socket房间
       await socket.join(targetRoom.id);
       socket.data.roomId = targetRoom.id;
+
+      // 更新全局用户状态
+      await userStateService.setUserCurrentRoom(userId, targetRoom.id);
 
       // 保存房间状态
       await redisClient.setEx(`room:${targetRoom.id}`, 3600, JSON.stringify(roomState));
