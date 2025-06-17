@@ -39,7 +39,7 @@ export class ValidationMiddleware {
       };
     }
 
-    const roomState = JSON.parse(roomData);
+    const roomState = JSON.parse(roomData.toString());
 
     // 3. 验证玩家是否在房间中
     const player = roomState.players.find((p: any) => p.id === userId);
@@ -249,7 +249,7 @@ export class ValidationMiddleware {
     const lastActionTime = await redisClient.get(lastActionKey);
     
     if (lastActionTime) {
-      const timeDiff = Date.now() - parseInt(lastActionTime);
+      const timeDiff = Date.now() - parseInt(lastActionTime.toString());
       if (timeDiff < 500) { // 最少间隔500ms
         return {
           valid: false,

@@ -31,7 +31,7 @@ export class UserStateService {
   async getUserCurrentRoom(userId: string): Promise<string | null> {
     try {
       const roomId = await redisClient.get(`user_room:${userId}`);
-      return roomId;
+      return roomId ? roomId.toString() : null;
     } catch (error) {
       console.error('Error getting user current room:', error);
       return null;
@@ -88,7 +88,7 @@ export class UserStateService {
         return { success: true, previousRoomId: currentRoomId };
       }
 
-      const roomState: RoomState = JSON.parse(roomData);
+      const roomState: RoomState = JSON.parse(roomData.toString());
       
       // 查找用户在房间中的位置
       const playerIndex = roomState.players.findIndex(p => p.id === userId);
@@ -245,7 +245,7 @@ export class UserStateService {
         return { consistent: false, issues, fixedIssues };
       }
 
-      const roomState: RoomState = JSON.parse(roomData);
+      const roomState: RoomState = JSON.parse(roomData.toString());
       const playerInRoom = roomState.players.find(p => p.id === userId);
       
       if (!playerInRoom) {
@@ -273,7 +273,7 @@ export class UserStateService {
         return [];
       }
 
-      const roomState: RoomState = JSON.parse(roomData);
+      const roomState: RoomState = JSON.parse(roomData.toString());
       return roomState.players
         .filter(p => p.isConnected)
         .map(p => p.id);

@@ -38,7 +38,7 @@ export function setupGameHandlers(
         });
       }
 
-      const roomState: RoomState = JSON.parse(roomData);
+      const roomState: RoomState = JSON.parse(roomData.toString());
       
       // 查找玩家
       const playerIndex = roomState.players.findIndex(p => p.id === userId);
@@ -153,7 +153,7 @@ export function setupGameHandlers(
         });
       }
 
-      const roomState: RoomState = JSON.parse(roomData);
+      const roomState: RoomState = JSON.parse(roomData.toString());
       
       if (!roomState.gameState) {
         return callback({
@@ -305,7 +305,7 @@ export function setupGameHandlers(
         });
       }
 
-      const roomState: RoomState = JSON.parse(roomData);
+      const roomState: RoomState = JSON.parse(roomData.toString());
       
       // 检查是否是房主
       if (roomState.ownerId !== userId) {

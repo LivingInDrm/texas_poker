@@ -43,7 +43,7 @@ router.get('/user-states', authenticateToken, requireAdmin, async (req: Request,
     const userStates = [];
 
     for (const key of keys) {
-      const userId = key.replace('user_room:', '');
+      const userId = key.toString().replace('user_room:', '');
       const roomId = await redisClient.get(key);
       
       if (roomId) {
@@ -85,7 +85,7 @@ router.get('/user-states/:userId', authenticateToken, requireAdmin, async (req: 
     if (currentRoom) {
       const roomData = await redisClient.get(`room:${currentRoom}`);
       if (roomData) {
-        const roomState = JSON.parse(roomData);
+        const roomState = JSON.parse(roomData.toString());
         const player = roomState.players.find((p: any) => p.id === userId);
         roomDetails = {
           roomState,
@@ -151,7 +151,7 @@ router.get('/room-consistency/:roomId', authenticateToken, requireAdmin, async (
       return res.status(404).json({ error: 'Room not found' });
     }
 
-    const roomState = JSON.parse(roomData);
+    const roomState = JSON.parse(roomData.toString());
     const issues = [];
     const players = roomState.players || [];
 
@@ -173,7 +173,7 @@ router.get('/room-consistency/:roomId', authenticateToken, requireAdmin, async (
     // 检查是否有用户引用了这个房间但不在玩家列表中
     const userRoomKeys = await redisClient.keys('user_room:*');
     for (const key of userRoomKeys) {
-      const userId = key.replace('user_room:', '');
+      const userId = key.toString().replace('user_room:', '');
       const userRoomId = await redisClient.get(key);
       
       if (userRoomId === roomId) {

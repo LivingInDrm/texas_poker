@@ -136,7 +136,7 @@ router.get('/list', async (req: Request, res: Response) => {
         let currentPlayers = 0;
         
         if (roomStateStr) {
-          const roomState = JSON.parse(roomStateStr);
+          const roomState = JSON.parse(roomStateStr.toString());
           currentPlayers = roomState.currentPlayers || 0;
         }
 
@@ -227,7 +227,7 @@ router.post('/join', authenticateToken, async (req: Request, res: Response) => {
     let roomState;
 
     if (roomStateStr) {
-      roomState = JSON.parse(roomStateStr);
+      roomState = JSON.parse(roomStateStr.toString());
     } else {
       // 如果 Redis 中没有，从数据库重建
       roomState = {

@@ -85,7 +85,7 @@ export function setupRoomHandlers(
       const existingRoomData = await redisClient.get(`room:${roomId}`);
       
       if (existingRoomData) {
-        roomState = JSON.parse(existingRoomData);
+        roomState = JSON.parse(existingRoomData.toString());
       } else {
         // 初始化房间状态
         roomState = {
@@ -226,7 +226,7 @@ export function setupRoomHandlers(
         });
       }
 
-      const roomState: RoomState = JSON.parse(roomData);
+      const roomState: RoomState = JSON.parse(roomData.toString());
       
       // 查找玩家
       const playerIndex = roomState.players.findIndex(p => p.id === userId);
@@ -348,7 +348,7 @@ export function setupRoomHandlers(
       for (const room of availableRooms) {
         const roomData = await redisClient.get(`room:${room.id}`);
         if (roomData) {
-          const state = JSON.parse(roomData);
+          const state = JSON.parse(roomData.toString());
           if (state.players.length < state.maxPlayers) {
             targetRoom = room;
             roomState = state;
