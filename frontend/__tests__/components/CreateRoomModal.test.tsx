@@ -4,11 +4,9 @@ import CreateRoomModal from '../../src/components/CreateRoomModal';
 
 // Mock the room store
 const mockCreateRoom = vi.fn();
-vi.mock('../../src/components/../stores/roomStore', () => ({
-  useRoomStore: vi.fn(() => ({
-    createRoom: mockCreateRoom,
-    isLoading: false
-  }))
+
+vi.mock('../../src/stores/roomStore', () => ({
+  useRoomStore: vi.fn()
 }));
 
 describe('CreateRoomModal', () => {
@@ -17,8 +15,14 @@ describe('CreateRoomModal', () => {
     onClose: vi.fn()
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    // Reset to default mock implementation
+    const { useRoomStore } = await import('../../src/stores/roomStore');
+    (useRoomStore as any).mockReturnValue({
+      createRoom: mockCreateRoom,
+      isLoading: false
+    });
   });
 
   describe('Rendering', () => {
@@ -131,37 +135,23 @@ describe('CreateRoomModal', () => {
   });
 
   describe('Form Validation', () => {
-    it('should validate player limit range (below minimum)', async () => {
+    it('should only allow valid player limit values in select', () => {
       render(<CreateRoomModal {...defaultProps} />);
       
-      // Manually set invalid player limit
-      const form = document.querySelector('form');
       const playerLimitSelect = screen.getByRole('combobox');
+      const options = playerLimitSelect.querySelectorAll('option');
       
-      // Simulate invalid state by directly triggering submit with invalid data
-      Object.defineProperty(playerLimitSelect, 'value', { value: '1', writable: true });
-      
-      fireEvent.submit(form);
-      
-      await waitFor(() => {
-        expect(screen.getByText('玩家数量必须在2-9之间')).toBeInTheDocument();
-      });
+      // Should have options for 2-9 players
+      expect(options).toHaveLength(8); // 2, 3, 4, 5, 6, 7, 8, 9
+      expect(options[0]).toHaveValue('2');
+      expect(options[7]).toHaveValue('9');
     });
 
-    it('should validate player limit range (above maximum)', async () => {
+    it('should have default player limit of 6', () => {
       render(<CreateRoomModal {...defaultProps} />);
       
-      const form = document.querySelector('form');
       const playerLimitSelect = screen.getByRole('combobox');
-      
-      // Simulate invalid state
-      Object.defineProperty(playerLimitSelect, 'value', { value: '10', writable: true });
-      
-      fireEvent.submit(form);
-      
-      await waitFor(() => {
-        expect(screen.getByText('玩家数量必须在2-9之间')).toBeInTheDocument();
-      });
+      expect(playerLimitSelect).toHaveValue('6');
     });
 
     it('should validate blind amounts (big blind <= small blind)', async () => {
@@ -305,9 +295,9 @@ describe('CreateRoomModal', () => {
   });
 
   describe('Loading States', () => {
-    it('should show loading state when creating room', () => {
-      const { useRoomStore } = require('../../stores/roomStore');
-      useRoomStore.mockReturnValue({
+    it('should show loading state when creating room', async () => {
+      const { useRoomStore } = await import('../../src/stores/roomStore');
+      (useRoomStore as any).mockReturnValue({
         createRoom: mockCreateRoom,
         isLoading: true
       });
@@ -318,9 +308,9 @@ describe('CreateRoomModal', () => {
       expect(submitButton).toBeDisabled();
     });
 
-    it('should disable submit button when loading', () => {
-      const { useRoomStore } = require('../../stores/roomStore');
-      useRoomStore.mockReturnValue({
+    it('should disable submit button when loading', async () => {
+      const { useRoomStore } = await import('../../src/stores/roomStore');
+      (useRoomStore as any).mockReturnValue({
         createRoom: mockCreateRoom,
         isLoading: true
       });

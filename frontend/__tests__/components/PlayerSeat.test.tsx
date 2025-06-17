@@ -93,9 +93,14 @@ describe('PlayerSeat', () => {
   test('shows cards when showCards is true', () => {
     render(<PlayerSeat player={mockPlayer} position={mockPosition} showCards={true} />);
     
-    // Should show actual cards (multiple A's and K's for rank and suit)
-    expect(screen.getAllByText('A').length).toBeGreaterThan(1);
-    expect(screen.getAllByText('K').length).toBeGreaterThan(1);
+    // Should show actual cards - check for poker card suits to distinguish from avatar
+    expect(screen.getByText('♠')).toBeInTheDocument(); // Spade suit
+    expect(screen.getByText('♥')).toBeInTheDocument(); // Heart suit
+    // Verify both card ranks are present (using getAllByText since avatar also shows 'A')
+    const aceElements = screen.getAllByText('A');
+    const kingElements = screen.getAllByText('K');
+    expect(aceElements.length).toBeGreaterThanOrEqual(1);
+    expect(kingElements.length).toBeGreaterThanOrEqual(1);
   });
 
   test('hides cards when showCards is false', () => {

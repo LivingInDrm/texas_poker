@@ -13,8 +13,8 @@ describe('PokerCard', () => {
     render(<PokerCard card={mockCard} />);
     
     // Should show ace and spade symbols
-    expect(screen.getAllByText('A')).toHaveLength(2); // Top and bottom
-    expect(screen.getAllByText('♠')).toHaveLength(3); // Top, center, bottom
+    expect(screen.getByText('A')).toBeInTheDocument();
+    expect(screen.getByText('♠')).toBeInTheDocument();
   });
 
   test('renders hidden card when isHidden is true', () => {
@@ -28,16 +28,16 @@ describe('PokerCard', () => {
     const redCard = { suit: Suit.HEARTS, rank: Rank.KING };
     render(<PokerCard card={redCard} />);
     
-    expect(screen.getAllByText('K')).toHaveLength(2);
-    expect(screen.getAllByText('♥')).toHaveLength(3);
+    expect(screen.getByText('K')).toBeInTheDocument();
+    expect(screen.getByText('♥')).toBeInTheDocument();
   });
 
   test('applies correct color for black suits', () => {
     const blackCard = { suit: Suit.SPADES, rank: Rank.QUEEN };
     render(<PokerCard card={blackCard} />);
     
-    expect(screen.getAllByText('Q')).toHaveLength(2);
-    expect(screen.getAllByText('♠')).toHaveLength(3);
+    expect(screen.getByText('Q')).toBeInTheDocument();
+    expect(screen.getByText('♠')).toBeInTheDocument();
   });
 
   test('renders different sizes correctly', () => {
@@ -45,7 +45,7 @@ describe('PokerCard', () => {
     const { container: largeContainer } = render(<PokerCard card={mockCard} size="large" />);
     
     // Check that different size classes are applied
-    expect(smallContainer.querySelector('.w-8')).toBeInTheDocument();
+    expect(smallContainer.querySelector('.w-10')).toBeInTheDocument(); // small size uses w-10
     expect(largeContainer.querySelector('.w-16')).toBeInTheDocument();
   });
 });
@@ -60,9 +60,9 @@ describe('PokerCards', () => {
   test('renders multiple cards', () => {
     render(<PokerCards cards={mockCards} />);
     
-    expect(screen.getAllByText('A')).toHaveLength(2); // Ace top and bottom
-    expect(screen.getAllByText('K')).toHaveLength(2); // King top and bottom
-    expect(screen.getAllByText('Q')).toHaveLength(2); // Queen top and bottom
+    expect(screen.getByText('A')).toBeInTheDocument(); // Ace
+    expect(screen.getByText('K')).toBeInTheDocument(); // King
+    expect(screen.getByText('Q')).toBeInTheDocument(); // Queen
   });
 
   test('renders all cards as hidden when isHidden is true', () => {

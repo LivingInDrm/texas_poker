@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BrowserRouter } from 'react-router-dom';
-import LobbyPage from '../../src/components/LobbyPage';
+import LobbyPage from '../../src/pages/LobbyPage';
 
 // Mock the stores and hooks
-vi.mock('../../src/components/../stores/userStore', () => ({
+vi.mock('../../src/stores/userStore', () => ({
   useUserStore: vi.fn(() => ({
     user: {
       id: 'user-123',
@@ -16,7 +16,7 @@ vi.mock('../../src/components/../stores/userStore', () => ({
   }))
 }));
 
-vi.mock('../../src/components/../stores/roomStore', () => ({
+vi.mock('../../src/stores/roomStore', () => ({
   useRoomStore: vi.fn(() => ({
     rooms: [
       {
@@ -58,7 +58,7 @@ vi.mock('../../src/components/../stores/roomStore', () => ({
   }))
 }));
 
-vi.mock('../../src/components/../hooks/useSocket', () => ({
+vi.mock('../../src/hooks/useSocket', () => ({
   useSocket: vi.fn(() => ({
     connected: true,
     connectionStatus: 'connected',
@@ -81,7 +81,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 // Mock components
-vi.mock('../../src/components/../components/NetworkIndicator', () => ({
+vi.mock('../../src/components/NetworkIndicator', () => ({
   NetworkIndicator: ({ connectionStatus, networkQuality }: any) => (
     <div data-testid="network-indicator">
       Status: {connectionStatus}, Quality: {networkQuality}
@@ -89,7 +89,7 @@ vi.mock('../../src/components/../components/NetworkIndicator', () => ({
   )
 }));
 
-vi.mock('../../src/components/../components/RoomList', () => ({
+vi.mock('../../src/components/RoomList', () => ({
   default: ({ rooms, isLoading, onJoinRoom, pagination, onPageChange }: any) => (
     <div data-testid="room-list">
       <div data-testid="room-count">{rooms.length} rooms</div>
@@ -110,7 +110,7 @@ vi.mock('../../src/components/../components/RoomList', () => ({
   )
 }));
 
-vi.mock('../../src/components/../components/CreateRoomModal', () => ({
+vi.mock('../../src/components/CreateRoomModal', () => ({
   default: ({ isOpen, onClose }: any) => (
     isOpen ? (
       <div data-testid="create-room-modal">
@@ -121,7 +121,7 @@ vi.mock('../../src/components/../components/CreateRoomModal', () => ({
   )
 }));
 
-vi.mock('../../src/components/../components/JoinRoomModal', () => ({
+vi.mock('../../src/components/JoinRoomModal', () => ({
   default: ({ isOpen, onClose, roomId, onJoinRoom }: any) => (
     isOpen ? (
       <div data-testid="join-room-modal">
@@ -265,7 +265,7 @@ describe('LobbyPage', () => {
         data: { roomId: 'room-123' }
       });
 
-      const { useSocket } = await import('../../hooks/useSocket');
+      const { useSocket } = await import('../../src/hooks/useSocket');
       (useSocket as any).mockReturnValue({
         connected: true,
         connectionStatus: 'connected',
@@ -286,7 +286,7 @@ describe('LobbyPage', () => {
     it('should show loading state during quick start', async () => {
       const mockQuickStart = vi.fn().mockReturnValue(new Promise(() => {})); // Never resolves
 
-      const { useSocket } = await import('../../hooks/useSocket');
+      const { useSocket } = await import('../../src/hooks/useSocket');
       (useSocket as any).mockReturnValue({
         connected: true,
         connectionStatus: 'connected',
@@ -311,7 +311,7 @@ describe('LobbyPage', () => {
         data: { roomId: 'room-123' }
       });
 
-      const { useSocket } = await import('../../hooks/useSocket');
+      const { useSocket } = await import('../../src/hooks/useSocket');
       (useSocket as any).mockReturnValue({
         connected: true,
         connectionStatus: 'connected',
@@ -332,7 +332,7 @@ describe('LobbyPage', () => {
     });
 
     it('should use fallback quick start when not connected', async () => {
-      const { useSocket } = await import('../../hooks/useSocket');
+      const { useSocket } = await import('../../src/hooks/useSocket');
       (useSocket as any).mockReturnValue({
         connected: false,
         connectionStatus: 'disconnected',
@@ -354,7 +354,7 @@ describe('LobbyPage', () => {
 
   describe('Socket Integration', () => {
     it('should show connection warning when not connected', async () => {
-      const { useSocket } = await import('../../hooks/useSocket');
+      const { useSocket } = await import('../../src/hooks/useSocket');
       (useSocket as any).mockReturnValue({
         connected: false,
         connectionStatus: 'disconnected',
@@ -375,7 +375,7 @@ describe('LobbyPage', () => {
         success: true
       });
 
-      const { useSocket } = await import('../../hooks/useSocket');
+      const { useSocket } = await import('../../src/hooks/useSocket');
       (useSocket as any).mockReturnValue({
         connected: true,
         connectionStatus: 'connected',
@@ -401,7 +401,7 @@ describe('LobbyPage', () => {
 
   describe('Error Handling', () => {
     it('should display error messages from room store', async () => {
-      const { useRoomStore } = await import('../../stores/roomStore');
+      const { useRoomStore } = await import('../../src/stores/roomStore');
       (useRoomStore as any).mockReturnValue({
         rooms: [],
         isLoading: false,
@@ -419,7 +419,7 @@ describe('LobbyPage', () => {
 
     it('should allow clearing error messages', async () => {
       const mockClearError = vi.fn();
-      const { useRoomStore } = await import('../../stores/roomStore');
+      const { useRoomStore } = await import('../../src/stores/roomStore');
       (useRoomStore as any).mockReturnValue({
         rooms: [],
         isLoading: false,
@@ -441,7 +441,7 @@ describe('LobbyPage', () => {
     it('should handle socket errors', async () => {
       const mockQuickStart = vi.fn().mockRejectedValue(new Error('Socket error'));
 
-      const { useSocket } = await import('../../hooks/useSocket');
+      const { useSocket } = await import('../../src/hooks/useSocket');
       (useSocket as any).mockReturnValue({
         connected: true,
         connectionStatus: 'connected',
@@ -487,7 +487,7 @@ describe('LobbyPage', () => {
   describe('Lifecycle and Effects', () => {
     it('should fetch rooms on mount', async () => {
       const mockFetchRooms = vi.fn();
-      const { useRoomStore } = await import('../../stores/roomStore');
+      const { useRoomStore } = await import('../../src/stores/roomStore');
       (useRoomStore as any).mockReturnValue({
         rooms: [],
         isLoading: false,
@@ -505,7 +505,7 @@ describe('LobbyPage', () => {
 
     it('should auto-refresh rooms every 10 seconds', async () => {
       const mockRefreshRooms = vi.fn();
-      const { useRoomStore } = await import('../../stores/roomStore');
+      const { useRoomStore } = await import('../../src/stores/roomStore');
       (useRoomStore as any).mockReturnValue({
         rooms: [],
         isLoading: false,
@@ -529,7 +529,7 @@ describe('LobbyPage', () => {
 
     it('should attempt socket connection when user is present but not connected', async () => {
       const mockConnect = vi.fn();
-      const { useSocket } = await import('../../hooks/useSocket');
+      const { useSocket } = await import('../../src/hooks/useSocket');
       (useSocket as any).mockReturnValue({
         connected: false,
         connectionStatus: 'disconnected',
@@ -548,7 +548,7 @@ describe('LobbyPage', () => {
   describe('User Actions', () => {
     it('should handle logout action', async () => {
       const mockLogout = vi.fn();
-      const { useUserStore } = await import('../../stores/userStore');
+      const { useUserStore } = await import('../../src/stores/userStore');
       (useUserStore as any).mockReturnValue({
         user: {
           id: 'user-123',
@@ -568,7 +568,7 @@ describe('LobbyPage', () => {
 
     it('should handle refresh rooms action', async () => {
       const mockRefreshRooms = vi.fn();
-      const { useRoomStore } = await import('../../stores/roomStore');
+      const { useRoomStore } = await import('../../src/stores/roomStore');
       (useRoomStore as any).mockReturnValue({
         rooms: [],
         isLoading: false,
@@ -589,7 +589,7 @@ describe('LobbyPage', () => {
 
     it('should handle pagination changes', async () => {
       const mockFetchRooms = vi.fn();
-      const { useRoomStore } = await import('../../stores/roomStore');
+      const { useRoomStore } = await import('../../src/stores/roomStore');
       (useRoomStore as any).mockReturnValue({
         rooms: [{ id: 'room-1', owner: { username: 'test' } }],
         isLoading: false,

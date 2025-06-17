@@ -174,9 +174,7 @@ class SocketService {
       console.log(`Reconnected after ${attemptNumber} attempts`);
       
       // 重连后尝试恢复房间状态
-      if (this.currentRoomId) {
-        this.attemptRoomReconnection();
-      }
+      this.attemptStateRecovery();
     });
 
     this.socket.on(SOCKET_EVENTS.RECONNECT_ERROR, (error) => {
@@ -282,6 +280,37 @@ class SocketService {
     this.socket.on(SOCKET_EVENTS.HEARTBEAT, (timestamp) => {
       // 响应心跳
       this.socket?.emit(SOCKET_EVENTS.HEARTBEAT_RESPONSE, timestamp);
+    });
+  }
+
+  // 获取用户当前房间状态
+  async getUserCurrentRoomStatus(): Promise<{
+    roomId: string | null;
+    roomDetails?: {
+      playerCount: number;
+      isGameStarted: boolean;
+      roomState: any;
+    };
+  }> {
+    if (!this.socket?.connected) {
+      return { roomId: null };
+    }
+
+    return new Promise((resolve, reject) => {
+      this.socket!.emit('GET_USER_CURRENT_ROOM', {}, (response) => {
+        if (response.success) {
+          resolve({
+            roomId: response.data?.roomId || null,
+            roomDetails: response.data?.roomDetails
+          });
+        } else {
+          resolve({ roomId: null });
+        }
+      });
+
+      setTimeout(() => {
+        resolve({ roomId: null });
+      }, 5000);
     });
   }
 
@@ -463,13 +492,62 @@ class SocketService {
     this.emit('network_quality_update', this.networkQuality);
   }
 
-  // 断线重连处理
-  private attemptRoomReconnection() {
-    if (this.currentRoomId && this.socket?.connected) {
-      this.socket.emit(SOCKET_EVENTS.RECONNECT_ATTEMPT, { 
-        roomId: this.currentRoomId 
-      });
+  // 断线重连后的状态恢复
+  private async attemptStateRecovery() {
+    if (!this.socket?.connected) return;
+
+    try {
+      console.log('Attempting state recovery after reconnection...');
+      
+      // 获取服务器端的用户状态
+      const serverState = await this.getUserCurrentRoomStatus();
+      
+      if (serverState.roomId) {
+        // 服务器认为用户在房间中
+        console.log('Server state: user in room', serverState.roomId);
+        
+        if (this.currentRoomId !== serverState.roomId) {
+          // 本地状态与服务器不一致，同步到服务器状态
+          console.log('Local state inconsistent, syncing to server state');
+          this.currentRoomId = serverState.roomId;
+          
+          // 尝试重新加入房间
+          this.socket.emit(SOCKET_EVENTS.RECONNECT_ATTEMPT, { 
+            roomId: serverState.roomId 
+          });
+        } else {
+          // 状态一致，直接尝试重连
+          this.socket.emit(SOCKET_EVENTS.RECONNECT_ATTEMPT, { 
+            roomId: this.currentRoomId 
+          });
+        }
+      } else {
+        // 服务器认为用户不在房间中
+        console.log('Server state: user not in room');
+        
+        if (this.currentRoomId) {
+          // 本地认为在房间中，但服务器不认为，清理本地状态
+          console.log('Clearing inconsistent local state');
+          this.currentRoomId = null;
+          this.currentGameState = null;
+          this.isInGame = false;
+          
+          // 通知状态变化
+          this.emit('state_recovery_completed', { 
+            recovered: false, 
+            reason: 'No room state on server' 
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to recover state after reconnection:', error);
+      this.emit('state_recovery_failed', { error });
     }
+  }
+
+  // 断线重连处理（保持向后兼容）
+  private attemptRoomReconnection() {
+    this.attemptStateRecovery();
   }
 
   // 工具方法

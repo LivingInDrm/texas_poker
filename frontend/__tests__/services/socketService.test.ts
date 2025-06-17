@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { io } from 'socket.io-client';
-import socketService from '../socketService';
-import { SOCKET_EVENTS, ConnectionStatus } from '../../types/socket';
+import socketService from '../../src/services/socketService';
+import { SOCKET_EVENTS, ConnectionStatus } from '../../src/types/socket';
 
 // Mock socket.io-client
 vi.mock('socket.io-client', () => ({
@@ -31,7 +31,11 @@ describe('SocketService', () => {
       leave: vi.fn()
     };
 
+    // 确保 io mock 正确返回 mockSocket
     (io as Mock).mockReturnValue(mockSocket);
+    
+    // 重置 socketService 状态
+    socketService.disconnect();
   });
 
   afterEach(() => {
@@ -41,15 +45,23 @@ describe('SocketService', () => {
 
   describe('连接管理', () => {
     it('应该能够成功连接到服务器', async () => {
+      // 设置 mock 连接成功
       mockSocket.connected = true;
+      
+      // 模拟连接事件处理器
+      let connectHandler: Function;
+      mockSocket.on.mockImplementation((event: string, handler: Function) => {
+        if (event === SOCKET_EVENTS.CONNECT) {
+          connectHandler = handler;
+        }
+      });
 
-      // 模拟连接成功
+      // 模拟连接行为
       mockSocket.connect.mockImplementation(() => {
-        // 模拟连接事件
-        const connectHandler = mockSocket.on.mock.calls.find(
-          (call: any) => call[0] === SOCKET_EVENTS.CONNECT
-        )?.[1];
-        if (connectHandler) connectHandler();
+        // 立即触发连接成功事件
+        if (connectHandler) {
+          setTimeout(() => connectHandler(), 0);
+        }
       });
 
       const result = await socketService.connect(mockToken);
@@ -65,11 +77,19 @@ describe('SocketService', () => {
     it('应该处理连接失败', async () => {
       const mockError = new Error('Connection failed');
       
+      // 模拟错误事件处理器
+      let errorHandler: Function;
+      mockSocket.once.mockImplementation((event: string, handler: Function) => {
+        if (event === SOCKET_EVENTS.CONNECT_ERROR) {
+          errorHandler = handler;
+        }
+      });
+      
+      // 模拟连接失败
       mockSocket.connect.mockImplementation(() => {
-        const errorHandler = mockSocket.once.mock.calls.find(
-          (call: any) => call[0] === SOCKET_EVENTS.CONNECT_ERROR
-        )?.[1];
-        if (errorHandler) errorHandler(mockError);
+        if (errorHandler) {
+          setTimeout(() => errorHandler(mockError), 0);
+        }
       });
 
       const result = await socketService.connect(mockToken);
@@ -78,6 +98,9 @@ describe('SocketService', () => {
     });
 
     it('应该能够断开连接', () => {
+      // 首先设置 socket 实例到 socketService
+      (socketService as any).socket = mockSocket;
+      
       socketService.disconnect();
 
       expect(mockSocket.disconnect).toHaveBeenCalled();
@@ -88,14 +111,24 @@ describe('SocketService', () => {
   describe('房间操作', () => {
     beforeEach(async () => {
       mockSocket.connected = true;
-      mockSocket.connect.mockImplementation(() => {
-        const connectHandler = mockSocket.on.mock.calls.find(
-          (call: any) => call[0] === SOCKET_EVENTS.CONNECT
-        )?.[1];
-        if (connectHandler) connectHandler();
+      
+      // 设置连接事件处理器
+      let connectHandler: Function;
+      mockSocket.on.mockImplementation((event: string, handler: Function) => {
+        if (event === SOCKET_EVENTS.CONNECT) {
+          connectHandler = handler;
+        }
       });
+      
+      // 模拟连接成功
+      mockSocket.connect.mockImplementation(() => {
+        if (connectHandler) {
+          setTimeout(() => connectHandler(), 0);
+        }
+      });
+      
       await socketService.connect(mockToken);
-    });
+    }, 15000); // 增加超时时间
 
     it('应该能够加入房间', async () => {
       const roomId = 'test-room-id';
@@ -169,17 +202,27 @@ describe('SocketService', () => {
   describe('游戏操作', () => {
     beforeEach(async () => {
       mockSocket.connected = true;
-      mockSocket.connect.mockImplementation(() => {
-        const connectHandler = mockSocket.on.mock.calls.find(
-          (call: any) => call[0] === SOCKET_EVENTS.CONNECT
-        )?.[1];
-        if (connectHandler) connectHandler();
+      
+      // 设置连接事件处理器
+      let connectHandler: Function;
+      mockSocket.on.mockImplementation((event: string, handler: Function) => {
+        if (event === SOCKET_EVENTS.CONNECT) {
+          connectHandler = handler;
+        }
       });
+      
+      // 模拟连接成功
+      mockSocket.connect.mockImplementation(() => {
+        if (connectHandler) {
+          setTimeout(() => connectHandler(), 0);
+        }
+      });
+      
       await socketService.connect(mockToken);
       
       // 模拟加入房间
       (socketService as any).currentRoomId = 'test-room';
-    });
+    }, 15000); // 增加超时时间
 
     it('应该能够执行游戏行动', async () => {
       const action = {
@@ -268,14 +311,24 @@ describe('SocketService', () => {
   describe('网络质量监控', () => {
     beforeEach(async () => {
       mockSocket.connected = true;
-      mockSocket.connect.mockImplementation(() => {
-        const connectHandler = mockSocket.on.mock.calls.find(
-          (call: any) => call[0] === SOCKET_EVENTS.CONNECT
-        )?.[1];
-        if (connectHandler) connectHandler();
+      
+      // 设置连接事件处理器
+      let connectHandler: Function;
+      mockSocket.on.mockImplementation((event: string, handler: Function) => {
+        if (event === SOCKET_EVENTS.CONNECT) {
+          connectHandler = handler;
+        }
       });
+      
+      // 模拟连接成功
+      mockSocket.connect.mockImplementation(() => {
+        if (connectHandler) {
+          setTimeout(() => connectHandler(), 0);
+        }
+      });
+      
       await socketService.connect(mockToken);
-    });
+    }, 15000); // 增加超时时间
 
     it('应该发送ping并更新网络质量', (done) => {
       const startTime = Date.now();

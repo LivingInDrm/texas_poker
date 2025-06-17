@@ -7,6 +7,8 @@ import { NetworkIndicator } from '../components/NetworkIndicator';
 import RoomList from '../components/RoomList';
 import CreateRoomModal from '../components/CreateRoomModal';
 import JoinRoomModal from '../components/JoinRoomModal';
+import RoomSwitchConfirmModal from '../components/RoomSwitchConfirmModal';
+import UserCurrentRoomStatus from '../components/UserCurrentRoomStatus';
 
 const LobbyPage = () => {
   const navigate = useNavigate();
@@ -28,7 +30,9 @@ const LobbyPage = () => {
     networkQuality,
     connect,
     quickStart,
-    joinRoom: socketJoinRoom
+    joinRoom: socketJoinRoom,
+    getCurrentRoomStatus,
+    leaveCurrentRoom
   } = useSocket();
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -36,6 +40,19 @@ const LobbyPage = () => {
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [isQuickStarting, setIsQuickStarting] = useState(false);
   const [socketError, setSocketError] = useState<string | null>(null);
+  
+  // 房间切换确认相关状态
+  const [isRoomSwitchModalOpen, setIsRoomSwitchModalOpen] = useState(false);
+  const [pendingRoomJoin, setPendingRoomJoin] = useState<{
+    roomId: string;
+    password?: string;
+    currentRoomId: string;
+    currentRoomDetails?: {
+      playerCount: number;
+      isGameStarted: boolean;
+    };
+  } | null>(null);
+  const [currentUserRoomId, setCurrentUserRoomId] = useState<string | null>(null);
 
   // Fetch rooms on component mount
   useEffect(() => {
@@ -60,6 +77,22 @@ const LobbyPage = () => {
       });
     }
   }, [user, connected, connect]);
+
+  // 检查用户当前房间状态
+  useEffect(() => {
+    if (connected) {
+      getCurrentRoomStatus()
+        .then(status => {
+          setCurrentUserRoomId(status.roomId);
+          if (status.roomId) {
+            console.log('User is currently in room:', status.roomId);
+          }
+        })
+        .catch(error => {
+          console.error('Failed to get current room status:', error);
+        });
+    }
+  }, [connected, getCurrentRoomStatus]);
 
   // Socket quick start implementation
   const handleQuickStart = async () => {
@@ -87,7 +120,7 @@ const LobbyPage = () => {
     }
   };
 
-  // Enhanced room join with socket integration
+  // Enhanced room join with socket integration and conflict detection
   const handleJoinRoom = async (roomId: string, password?: string) => {
     if (!connected) {
       setSocketError('未连接到服务器，请检查网络连接');
@@ -97,9 +130,41 @@ const LobbyPage = () => {
     setSocketError(null);
 
     try {
+      // 首先检查用户当前房间状态
+      const currentStatus = await getCurrentRoomStatus();
+      
+      if (currentStatus.roomId && currentStatus.roomId !== roomId) {
+        // 用户在其他房间中，显示确认弹窗
+        setPendingRoomJoin({
+          roomId,
+          password,
+          currentRoomId: currentStatus.roomId,
+          currentRoomDetails: currentStatus.roomDetails ? {
+            playerCount: currentStatus.roomDetails.playerCount,
+            isGameStarted: currentStatus.roomDetails.isGameStarted
+          } : undefined
+        });
+        setIsRoomSwitchModalOpen(true);
+        return;
+      }
+
+      // 直接加入房间
+      await executeRoomJoin(roomId, password);
+    } catch (error: any) {
+      console.error('Join room failed:', error);
+      const errorMessage = error.message || '加入房间失败';
+      setSocketError(errorMessage);
+      throw error; // Re-throw to let JoinRoomModal handle it
+    }
+  };
+
+  // 执行实际的房间加入操作
+  const executeRoomJoin = async (roomId: string, password?: string) => {
+    try {
       const response = await socketJoinRoom(roomId, password);
       if (response.success) {
         console.log('Successfully joined room via socket:', roomId);
+        setCurrentUserRoomId(roomId);
         // Navigate to game page
         navigate(`/game/${roomId}`);
       } else {
@@ -108,10 +173,35 @@ const LobbyPage = () => {
         throw new Error(errorMessage);
       }
     } catch (error: any) {
-      console.error('Join room failed:', error);
-      const errorMessage = error.message || '加入房间失败';
-      setSocketError(errorMessage);
-      throw error; // Re-throw to let JoinRoomModal handle it
+      console.error('Execute room join failed:', error);
+      throw error;
+    }
+  };
+
+  // 确认房间切换
+  const handleConfirmRoomSwitch = async () => {
+    if (!pendingRoomJoin) return;
+
+    try {
+      await executeRoomJoin(pendingRoomJoin.roomId, pendingRoomJoin.password);
+      setPendingRoomJoin(null);
+      setIsRoomSwitchModalOpen(false);
+    } catch (error: any) {
+      console.error('Room switch failed:', error);
+      setSocketError(error.message || '房间切换失败');
+    }
+  };
+
+  // 处理离开当前房间
+  const handleLeaveCurrentRoom = async () => {
+    try {
+      await leaveCurrentRoom();
+      setCurrentUserRoomId(null);
+      // 刷新房间列表
+      await refreshRooms();
+    } catch (error: any) {
+      console.error('Failed to leave current room:', error);
+      setSocketError(error.message || '离开房间失败');
     }
   };
 
@@ -202,6 +292,16 @@ const LobbyPage = () => {
             选择一个房间开始游戏，或创建你自己的房间
           </p>
         </div>
+
+        {/* 用户当前房间状态 */}
+        {currentUserRoomId && (
+          <div className="mb-6">
+            <UserCurrentRoomStatus
+              currentRoomId={currentUserRoomId}
+              onLeaveRoom={handleLeaveCurrentRoom}
+            />
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
@@ -337,6 +437,18 @@ const LobbyPage = () => {
         onClose={() => setIsJoinModalOpen(false)}
         roomId={selectedRoomId}
         onJoinRoom={handleJoinRoom}
+      />
+
+      <RoomSwitchConfirmModal
+        isOpen={isRoomSwitchModalOpen}
+        onClose={() => {
+          setIsRoomSwitchModalOpen(false);
+          setPendingRoomJoin(null);
+        }}
+        onConfirm={handleConfirmRoomSwitch}
+        currentRoomId={pendingRoomJoin?.currentRoomId || ''}
+        targetRoomId={pendingRoomJoin?.roomId || ''}
+        currentRoomDetails={pendingRoomJoin?.currentRoomDetails}
       />
     </div>
   );

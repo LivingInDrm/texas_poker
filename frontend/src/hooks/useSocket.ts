@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUserStore } from '../stores/userStore';
 import { useGameStore } from '../stores/gameStore';
 import socketService from '../services/socketService';
@@ -27,6 +28,15 @@ interface UseSocketReturn {
   makeGameAction: (action: PlayerAction) => Promise<any>;
   setReady: () => Promise<any>;
   restartGame: () => Promise<any>;
+  getCurrentRoomStatus: () => Promise<{
+    roomId: string | null;
+    roomDetails?: {
+      playerCount: number;
+      isGameStarted: boolean;
+      roomState: any;
+    };
+  }>;
+  leaveCurrentRoom: () => Promise<any>;
   
   // 状态
   currentRoomId: string | null;
@@ -35,6 +45,7 @@ interface UseSocketReturn {
 }
 
 export function useSocket(): UseSocketReturn {
+  const navigate = useNavigate();
   const { user, token } = useUserStore();
   const { 
     setRoomState, 
@@ -165,6 +176,34 @@ export function useSocket(): UseSocketReturn {
     }
   }, []);
 
+  const getCurrentRoomStatus = useCallback(async () => {
+    try {
+      return await socketService.getUserCurrentRoomStatus();
+    } catch (error) {
+      console.error('Failed to get current room status:', error);
+      return { roomId: null };
+    }
+  }, []);
+
+  const leaveCurrentRoom = useCallback(async () => {
+    try {
+      const currentRoomId = socketService.roomId;
+      if (!currentRoomId) {
+        throw new Error('Not in a room');
+      }
+      
+      const response = await socketService.leaveRoom(currentRoomId);
+      if (response.success) {
+        setRoomState(null);
+        setGameState(null);
+      }
+      return response;
+    } catch (error) {
+      console.error('Failed to leave current room:', error);
+      throw error;
+    }
+  }, [setRoomState, setGameState]);
+
   // 设置事件监听器
   useEffect(() => {
     if (listenersSetup.current) return;
@@ -231,9 +270,37 @@ export function useSocket(): UseSocketReturn {
     // 系统事件监听
     socketService.on(SOCKET_EVENTS.RECONNECTED, (data: { roomId?: string; gameState?: GameState }) => {
       console.log('Reconnected to server');
+      if (data.roomId) {
+        // 检查当前路由是否与房间匹配
+        const currentPath = window.location.pathname;
+        const expectedPath = `/game/${data.roomId}`;
+        
+        if (currentPath !== expectedPath) {
+          console.log('Redirecting to correct room after reconnection');
+          navigate(`/game/${data.roomId}`);
+        }
+      }
       if (data.gameState) {
         setGameState(data.gameState);
       }
+    });
+
+    // 状态恢复事件监听
+    socketService.on('state_recovery_completed', (data: { recovered: boolean; reason?: string }) => {
+      console.log('State recovery completed:', data);
+      if (!data.recovered) {
+        // 状态恢复失败，可能需要返回大厅
+        const currentPath = window.location.pathname;
+        if (currentPath.startsWith('/game/')) {
+          console.log('Redirecting to lobby due to failed state recovery');
+          navigate('/lobby');
+        }
+      }
+    });
+
+    socketService.on('state_recovery_failed', (data: { error: any }) => {
+      console.error('State recovery failed:', data.error);
+      // 可以显示用户友好的错误消息
     });
 
     socketService.onError((error) => {
@@ -279,6 +346,8 @@ export function useSocket(): UseSocketReturn {
     makeGameAction,
     setReady,
     restartGame,
+    getCurrentRoomStatus,
+    leaveCurrentRoom,
     
     // 状态
     currentRoomId: socketService.roomId,
