@@ -29,6 +29,9 @@ Thumbs.db
 logs
 *.log
 
+# Test logs (structured)
+test-logs/
+
 # Docker volumes
 postgres_data/
 redis_data/

@@ -213,28 +213,37 @@ cat backend/.env
 
 ### 2. 测试新功能
 ```bash
-# 运行单元测试
-cd backend && npm test
-cd frontend && npm run test:run
+# 🔥 快速测试所有功能
+./test-all.sh
 
-# 运行特定测试
-cd backend && npm test -- tests/socket/socketServer.test.ts
+# 🧪 只测试新增功能
+./test-all.sh new
+
+# 📊 分类测试
+./test-all.sh backend    # 后端测试
+./test-all.sh frontend   # 前端测试
+./test-all.sh e2e        # E2E测试
+
+# 💫 单独测试特定功能
+cd backend && npm test -- tests/socket/systemHandlers.enhanced.test.ts
+cd frontend && npm test -- RoomSwitchConfirmModal.test.tsx
 ```
 
 ### 3. 提交代码前
 ```bash
-# 停止开发环境
-./dev-local.sh stop
+# 🚀 一键运行完整测试套件
+./test-all.sh
 
-# 使用Docker环境测试
-./dev.sh start
-
-# 运行完整测试套件
+# 📊 查看测试覆盖率
 cd backend && npm run test:coverage
-cd frontend && npm run test:run
+cd frontend && npm test -- --coverage
 
-# 构建生产版本测试
-docker-compose -f docker-compose.prod.yml build
+# 🏗️ 测试构建
+./test-all.sh build
+
+# 🔍 检查测试报告
+cat test_report.md
+cat test_err.md  # 查看已知问题
 ```
 
 ## 🚀 部署相关
@@ -258,6 +267,8 @@ cp .env.prod.example .env.prod
 - [产品设计文档](./texas_poker_product_design.md)
 - [代码架构文档](./codebase_architecture.md)
 - [开发计划](./plan.md)
+- [测试运行指南](./TEST_GUIDE.md) ⭐ **NEW**
+- [测试问题报告](./test_err.md) ⭐ **NEW**
 
 ## 🆘 获取帮助
 
@@ -267,3 +278,7 @@ cp .env.prod.example .env.prod
 2. 运行 `./dev-local.sh help` 或 `./dev.sh help` 查看命令帮助
 3. 检查日志文件：`backend_dev.log` 和 `frontend_dev.log`
 4. 查看Docker容器日志：`docker-compose logs [service]`
+5. **测试相关问题**：
+   - 查看 `./TEST_GUIDE.md` 了解如何运行测试
+   - 查看 `./test_err.md` 了解已知测试问题和解决方案
+   - 运行 `./test-all.sh help` 查看测试命令帮助

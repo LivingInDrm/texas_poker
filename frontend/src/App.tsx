@@ -4,10 +4,14 @@ import LoginPage from './pages/LoginPage';
 import LobbyPage from './pages/LobbyPage';
 import GamePage from './pages/GamePage';
 import ProtectedRoute from './components/ProtectedRoute';
+import ReconnectionIndicator from './components/ReconnectionIndicator';
+import { useSocket } from './hooks/useSocket';
 
-function App() {
+function AppContent() {
+  const { connectionStatus } = useSocket();
+
   return (
-    <Router>
+    <>
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
@@ -37,6 +41,17 @@ function App() {
         {/* Catch all - redirect to lobby */}
         <Route path="*" element={<Navigate to="/lobby" replace />} />
       </Routes>
+      
+      {/* 全局重连指示器 */}
+      <ReconnectionIndicator connectionStatus={connectionStatus} />
+    </>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 }
