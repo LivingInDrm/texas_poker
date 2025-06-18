@@ -718,7 +718,7 @@ export class GameState {
       .filter(p => p.status !== PlayerStatus.FOLDED);
 
     const winners = activePlayers.map(player => {
-      let hand = null;
+      let hand: HandRank | null = null;
       // 只有在有足够公共牌时才评估手牌
       if (this.communityCards.length === 5) {
         hand = HandEvaluator.evaluateHand([...player.cards, ...this.communityCards]);
