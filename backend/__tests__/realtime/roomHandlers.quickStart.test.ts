@@ -197,9 +197,22 @@ const quickStart = async (socket: any, callback: Function) => {
 describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
   let mocks: any;
 
+  // 辅助函数：同步socket数据和测试数据
+  const syncSocketWithTestData = (socket: any, testData: any) => {
+    socket.data.userId = testData.user.id;
+    socket.data.username = testData.user.username;
+  };
+
   beforeEach(() => {
     // 创建完整的Mock环境
     mocks = MockFactory.createRoomHandlerMocks();
+    
+    // 将服务注入到Socket Mock中
+    mocks.socket.prisma = mocks.prisma;
+    mocks.socket.redis = mocks.redis;
+    mocks.socket.userStateService = mocks.userStateService;
+    mocks.socket.validationMiddleware = mocks.validationMiddleware;
+    mocks.socket.io = mocks.io;
     
     // 重置数据生成器
     TestDataGenerator.resetCounter();
@@ -215,7 +228,10 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       // 1. 生成测试数据
       const testData = RoomHandlerTestData.forQuickStart('joinExisting');
       
-      // 2. 配置Mock
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
+      // 3. 配置Mock
       MockDataConfigurator.configureAllMocks(mocks, testData);
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 
         success: true, 
@@ -224,11 +240,11 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       mocks.prisma.room.findMany.mockResolvedValue(testData.availableRooms);
       mocks.redis.get.mockResolvedValue(JSON.stringify(testData.roomState));
       
-      // 3. 执行测试
+      // 4. 执行测试
       await quickStart(mocks.socket, mocks.callback);
       
-      // 4. 验证结果
-      SocketTestHelper.expectSuccessCallback(mocks.callback, 'Quick start successful - joined existing room');
+      // 4. 验证结果  
+      SocketTestHelper.expectSuccessCallback(mocks.callback, expect.any(Object), 'Quick start successful - joined existing room');
       SocketTestHelper.expectSocketJoin(mocks.socket, testData.availableRooms[0].id);
       
       // 5. 验证房间状态更新
@@ -247,7 +263,10 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
         currentPlayerCount: 1
       });
       
-      // 2. 配置Mock - 第一个房间满员，第二个有空位
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
+      // 3. 配置Mock - 第一个房间满员，第二个有空位
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 
         success: true, 
         code: 'NO_CURRENT_ROOM' 
@@ -260,7 +279,7 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
         .mockResolvedValueOnce(JSON.stringify(fullRoomState)) // 第一个房间满员
         .mockResolvedValueOnce(JSON.stringify(emptyRoomState)); // 第二个房间有空位
       
-      // 3. 执行测试
+      // 4. 执行测试
       await quickStart(mocks.socket, mocks.callback);
       
       // 4. 验证加入了第二个房间
@@ -271,6 +290,10 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
     it('应该跳过用户已在其中的房间', async () => {
       // 1. 生成测试数据
       const testData = RoomHandlerTestData.forQuickStart('joinExisting');
+      
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
       const roomStateWithUser = RoomStateFactory.createBasicRoomState({
         players: [
           { id: testData.user.id, username: testData.user.username, isConnected: true, chips: 1000, isReady: false, position: 0 }
@@ -281,7 +304,7 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
         currentPlayerCount: 1
       });
       
-      // 2. 配置Mock
+      // 3. 配置Mock
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 
         success: true, 
         code: 'NO_CURRENT_ROOM' 
@@ -294,7 +317,7 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
         .mockResolvedValueOnce(JSON.stringify(roomStateWithUser)) // 用户已在其中
         .mockResolvedValueOnce(JSON.stringify(emptyRoomState));   // 可用房间
       
-      // 3. 执行测试
+      // 4. 执行测试
       await quickStart(mocks.socket, mocks.callback);
       
       // 4. 验证跳过了第一个房间，加入了第二个
@@ -304,6 +327,10 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
     it('应该处理断线重连场景', async () => {
       // 1. 生成重连场景数据
       const testData = RoomHandlerTestData.forQuickStart('joinExisting');
+      
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
       const roomStateWithDisconnectedUser = RoomStateFactory.createBasicRoomState({
         players: [
           { 
@@ -326,7 +353,7 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
         currentPlayerCount: 2
       });
       
-      // 2. 配置Mock
+      // 3. 配置Mock
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 
         success: true, 
         code: 'NO_CURRENT_ROOM' 
@@ -334,7 +361,10 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       mocks.prisma.room.findMany.mockResolvedValue(testData.availableRooms);
       mocks.redis.get.mockResolvedValue(JSON.stringify(roomStateWithDisconnectedUser));
       
-      // 3. 执行测试
+      // 添加创建房间的Mock，以防万一走到创建新房间逻辑
+      mocks.prisma.room.create.mockResolvedValue(TestDataGenerator.createRoomData(testData.user.id));
+      
+      // 4. 执行测试
       await quickStart(mocks.socket, mocks.callback);
       
       // 4. 验证重连成功
@@ -353,7 +383,10 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       const testData = RoomHandlerTestData.forQuickStart('createNew');
       const newRoom = TestDataGenerator.createRoomData(testData.user.id);
       
-      // 2. 配置Mock
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
+      // 3. 配置Mock
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 
         success: true, 
         code: 'NO_CURRENT_ROOM' 
@@ -361,7 +394,7 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       mocks.prisma.room.findMany.mockResolvedValue([]); // 无可用房间
       mocks.prisma.room.create.mockResolvedValue(newRoom);
       
-      // 3. 执行测试
+      // 4. 执行测试
       await quickStart(mocks.socket, mocks.callback);
       
       // 4. 验证创建新房间
@@ -378,7 +411,7 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       });
       
       // 5. 验证成功响应
-      SocketTestHelper.expectSuccessCallback(mocks.callback, 'Quick start successful - created new room');
+      SocketTestHelper.expectSuccessCallback(mocks.callback, expect.any(Object), 'Quick start successful - created new room');
     });
 
     it('应该在所有房间都不合适时创建新房间', async () => {
@@ -387,7 +420,10 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       const fullRoomState = RoomStateFactory.createFullRoomState();
       const newRoom = TestDataGenerator.createRoomData(testData.user.id);
       
-      // 2. 配置Mock - 所有房间都满员
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
+      // 3. 配置Mock - 所有房间都满员
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 
         success: true, 
         code: 'NO_CURRENT_ROOM' 
@@ -404,7 +440,7 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       
       // 4. 验证创建了新房间
       expect(mocks.prisma.room.create).toHaveBeenCalled();
-      SocketTestHelper.expectSuccessCallback(mocks.callback, 'Quick start successful - created new room');
+      SocketTestHelper.expectSuccessCallback(mocks.callback, expect.any(Object), 'Quick start successful - created new room');
     });
 
     it('应该正确初始化新房间状态', async () => {
@@ -412,7 +448,10 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       const testData = RoomHandlerTestData.forQuickStart('createNew');
       const newRoom = TestDataGenerator.createRoomData(testData.user.id);
       
-      // 2. 配置Mock
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
+      // 3. 配置Mock
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 
         success: true, 
         code: 'NO_CURRENT_ROOM' 
@@ -440,7 +479,10 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       const testData = RoomHandlerTestData.forQuickStart('createNew');
       const newRoom = TestDataGenerator.createRoomData(testData.user.id);
       
-      // 2. 配置Mock
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
+      // 3. 配置Mock
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 
         success: true, 
         code: 'NO_CURRENT_ROOM' 
@@ -470,6 +512,9 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       // 1. 生成测试数据
       const testData = RoomHandlerTestData.forQuickStart('createNew');
       
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
       // 2. 配置冲突处理失败
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({
         success: false,
@@ -492,6 +537,9 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       // 1. 生成测试数据
       const testData = RoomHandlerTestData.forQuickStart('createNew');
       const newRoom = TestDataGenerator.createRoomData(testData.user.id);
+      
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
       
       // 2. 配置无当前房间
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({
@@ -529,6 +577,9 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
       // 1. 生成测试数据
       const testData = RoomHandlerTestData.forQuickStart('joinExisting');
       
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
       // 2. 配置Redis错误
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 
         success: true, 
@@ -563,6 +614,9 @@ describe('roomHandlers.quickStart - 快速开始功能单元测试', () => {
     it('应该处理用户状态服务错误', async () => {
       // 1. 生成测试数据
       const testData = RoomHandlerTestData.forQuickStart('joinExisting');
+      
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
       
       // 2. 配置用户状态服务错误
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ 

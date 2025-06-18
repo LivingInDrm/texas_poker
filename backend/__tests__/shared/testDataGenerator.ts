@@ -159,26 +159,30 @@ export class TestDataGenerator {
    * 创建Redis存储的房间状态数据
    */
   static createRedisRoomStateData(overrides: any = {}) {
+    // 首先确定玩家数量，优先使用overrides中的设置
+    const playerCount = overrides.currentPlayerCount || overrides.players?.length || 1;
+    
+    // 如果没有指定players，则根据playerCount生成
+    const players = overrides.players || Array.from({ length: playerCount }, (_, index) => ({
+      id: this.getUniqueId('player'),
+      username: `player_${Date.now()}`,
+      chips: 5000,
+      position: index,
+      isOwner: index === 0,
+      status: 'ACTIVE',
+      isConnected: true
+    }));
+    
     const baseState = {
       id: this.getUniqueId('room'),
-      ownerId: this.getUniqueId('owner'),
+      ownerId: players[0]?.id || this.getUniqueId('owner'),
       status: 'WAITING',
       maxPlayers: 6,
-      currentPlayerCount: 1,
+      currentPlayerCount: players.length,
       hasPassword: false,
       bigBlind: 20,
       smallBlind: 10,
-      players: [
-        {
-          id: this.getUniqueId('player'),
-          username: `player_${Date.now()}`,
-          chips: 5000,
-          position: 0,
-          isOwner: true,
-          status: 'ACTIVE',
-          isConnected: true
-        }
-      ],
+      players,
       gameStarted: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -374,12 +378,19 @@ export class TestDataGenerator {
         eventData: this.createSocketEventData('room:quick_start')
       }),
 
-      'quick-start-joinExisting': () => ({
-        user: this.createUserData(),
-        availableRooms: [this.createRoomData()],
-        roomState: this.createRedisRoomStateData({ currentPlayerCount: 2 }),
-        eventData: this.createSocketEventData('room:quick_start')
-      })
+      'quick-start-joinExisting': () => {
+        const room = this.createRoomData();
+        return {
+          user: this.createUserData(),
+          availableRooms: [room],
+          roomState: this.createRedisRoomStateData({ 
+            id: room.id,
+            ownerId: room.ownerId,
+            currentPlayerCount: 2 
+          }),
+          eventData: this.createSocketEventData('room:quick_start')
+        };
+      }
     };
 
     const baseData = scenarios[scenario]?.() ?? {};

@@ -225,9 +225,23 @@ const mockRoomHandlers = {
 describe('roomHandlers - 单元测试集成验证', () => {
   let mocks: any;
 
+  // 辅助函数：同步socket数据和测试数据
+  const syncSocketWithTestData = (socket: any, testData: any) => {
+    socket.data.userId = testData.user.id;
+    socket.data.username = testData.user.username;
+  };
+
   beforeEach(() => {
     // 创建完整的Mock环境
     mocks = MockFactory.createRoomHandlerMocks();
+    
+    // 将服务注入到Socket Mock中
+    mocks.socket.prisma = mocks.prisma;
+    mocks.socket.redis = mocks.redis;
+    mocks.socket.userStateService = mocks.userStateService;
+    mocks.socket.validationMiddleware = mocks.validationMiddleware;
+    mocks.socket.io = mocks.io;
+    mocks.socket.bcrypt = mocks.bcrypt;
     
     // 重置数据生成器
     TestDataGenerator.resetCounter();
@@ -272,6 +286,7 @@ describe('roomHandlers - 单元测试集成验证', () => {
             chips: 5000,
             isReady: false,
             position: 0, 
+            isOwner: true,  // 添加房主标识
             isConnected: true
           } as any,
           { 
@@ -280,13 +295,15 @@ describe('roomHandlers - 单元测试集成验证', () => {
             chips: 5000,
             isReady: false,
             position: 1, 
+            isOwner: false,  // 明确标识非房主
             isConnected: true
           } as any
         ],
         currentPlayerCount: 2
       });
       
-      // 2. 配置Mock环境
+      // 2. 配置Mock环境 - 确保socket数据与测试数据同步
+      syncSocketWithTestData(mocks.socket, testData);
       MockDataConfigurator.configureAllMocks(mocks, testData);
       mocks.redis.get.mockResolvedValue(JSON.stringify(roomState));
       
@@ -317,7 +334,7 @@ describe('roomHandlers - 单元测试集成验证', () => {
       await mockRoomHandlers.quickStart(mocks.socket, mocks.callback);
       
       // 4. 验证完整流程
-      SocketTestHelper.expectSuccessCallback(mocks.callback, 'Quick start successful - created new room');
+      SocketTestHelper.expectSuccessCallback(mocks.callback, expect.any(Object), 'Quick start successful - created new room');
       expect(mocks.prisma.room.findMany).toHaveBeenCalled(); // 查找房间
       expect(mocks.prisma.room.create).toHaveBeenCalled(); // 创建房间
       expect(mocks.userStateService.setUserCurrentRoom).toHaveBeenCalled(); // 设置状态
@@ -359,7 +376,7 @@ describe('roomHandlers - 单元测试集成验证', () => {
       mocks.redis.get.mockResolvedValue(JSON.stringify(roomState));
       
       await mockRoomHandlers.roomLeave(mocks.socket, { roomId: newRoom.id }, mocks.callback);
-      SocketTestHelper.expectSuccessCallback(mocks.callback, 'Left room and room deleted');
+      SocketTestHelper.expectSuccessCallback(mocks.callback, undefined, 'Left room and room deleted');
       
       // 3. 第三步：重新加入（应该创建新房间）
       mocks.callback.mockClear();
@@ -368,7 +385,7 @@ describe('roomHandlers - 单元测试集成验证', () => {
       mocks.prisma.room.create.mockResolvedValue(newRoom2);
       
       await mockRoomHandlers.quickStart(mocks.socket, mocks.callback);
-      SocketTestHelper.expectSuccessCallback(mocks.callback, 'Quick start successful - created new room');
+      SocketTestHelper.expectSuccessCallback(mocks.callback, expect.any(Object), 'Quick start successful - created new room');
     });
 
     it('多用户房间交互应该正确处理', async () => {
@@ -426,7 +443,7 @@ describe('roomHandlers - 单元测试集成验证', () => {
       await mockRoomHandlers.quickStart(mocks.socket, mocks.callback);
       
       // 4. 验证创建新房间
-      SocketTestHelper.expectSuccessCallback(mocks.callback, 'Quick start successful - created new room');
+      SocketTestHelper.expectSuccessCallback(mocks.callback, expect.any(Object), 'Quick start successful - created new room');
       expect(mocks.prisma.room.create).toHaveBeenCalled();
     });
   });
@@ -465,6 +482,7 @@ describe('roomHandlers - 单元测试集成验证', () => {
             chips: 5000,
             isReady: false,
             position: 0,
+            isOwner: true,  // 确保触发所有权转移逻辑
             isConnected: true
           } as any,
           { 
@@ -473,13 +491,15 @@ describe('roomHandlers - 单元测试集成验证', () => {
             chips: 5000,
             isReady: false,
             position: 1,
+            isOwner: false,
             isConnected: true
           } as any
         ],
         currentPlayerCount: 2
       });
       
-      // 2. 配置部分操作失败
+      // 2. 配置部分操作失败 - 确保socket数据与测试数据同步
+      syncSocketWithTestData(mocks.socket, testData);
       MockDataConfigurator.configureAllMocks(mocks, testData);
       mocks.redis.get.mockResolvedValue(JSON.stringify(roomState));
       mocks.prisma.room.update.mockRejectedValue(new Error('Database update failed'));

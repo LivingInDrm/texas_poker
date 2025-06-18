@@ -10,9 +10,13 @@ export class RoomStateFactory {
    * 适用于大多数测试场景
    */
   static createBasicRoomState(overrides: Partial<RoomState> = {}): RoomState {
+    // 生成唯一ID，避免测试中的ID冲突
+    const roomId = overrides.id || `room-${Math.random().toString(36).substring(2, 15)}-${Date.now()}`;
+    const ownerId = overrides.ownerId || `owner-${Math.random().toString(36).substring(2, 15)}-${Date.now()}`;
+    
     const defaultState: RoomState = {
-      id: 'room-123',
-      ownerId: 'owner-123',
+      id: roomId,
+      ownerId: ownerId,
       status: 'WAITING',
       maxPlayers: 6,
       currentPlayerCount: 1,
@@ -21,7 +25,7 @@ export class RoomStateFactory {
       smallBlind: 10,
       players: [
         this.createBasicPlayer({
-          id: 'owner-123',
+          id: ownerId,
           username: 'roomowner'
         })
       ],
@@ -74,25 +78,21 @@ export class RoomStateFactory {
    * 用于测试游戏相关功能
    */
   static createGameInProgressState(overrides: Partial<RoomState> = {}): RoomState {
-    const players = [
+    // 如果传入了players，使用传入的players；否则根据currentPlayerCount生成
+    const playerCount = overrides.currentPlayerCount || overrides.players?.length || 2;
+    const players = overrides.players || Array.from({ length: playerCount }, (_, index) => 
       this.createBasicPlayer({
-        id: 'player-1',
-        username: 'player1',
-        position: 0,
-        chips: 4800
-      }),
-      this.createBasicPlayer({
-        id: 'player-2', 
-        username: 'player2',
-        position: 1,
-        chips: 4900
+        id: `player-${index + 1}`,
+        username: `player${index + 1}`,
+        position: index,
+        chips: 4800 + (index * 100) // 轻微的筹码差异
       })
-    ];
+    );
 
     return this.createBasicRoomState({
       status: 'PLAYING',
       gameStarted: true,
-      currentPlayerCount: 2,
+      currentPlayerCount: players.length,
       players,
       gameState: this.createBasicGameState(),
       ...overrides
