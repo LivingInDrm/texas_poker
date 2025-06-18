@@ -224,8 +224,14 @@ cat backend/.env
 ./test-all.sh frontend   # 前端测试
 ./test-all.sh e2e        # E2E测试
 
+# 🎮 按功能域测试（NEW）
+cd backend && npm test -- --testPathPattern=game     # 游戏引擎测试
+cd backend && npm test -- --testPathPattern=api      # API接口测试
+cd backend && npm test -- --testPathPattern=realtime # 实时通信测试
+cd backend && npm test -- --testPathPattern=storage  # 数据存储测试
+
 # 💫 单独测试特定功能
-cd backend && npm test -- tests/socket/systemHandlers.enhanced.test.ts
+cd backend && npm test -- __tests__/realtime/socketServer.test.ts
 cd frontend && npm test -- RoomSwitchConfirmModal.test.tsx
 ```
 
@@ -267,6 +273,7 @@ cp .env.prod.example .env.prod
 - [产品设计文档](./texas_poker_product_design.md)
 - [代码架构文档](./codebase_architecture.md)
 - [开发计划](./plan.md)
+- [测试编写规范](./TEST_STANDARDS.md) ⭐ **UPDATED**
 - [测试运行指南](./TEST_GUIDE.md) ⭐ **NEW**
 - [测试问题报告](./test_err.md) ⭐ **NEW**
 

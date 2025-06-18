@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Texas Poker 统一测试执行脚本 v2.2
-# 基于重构后的测试架构和TEST_STANDARDS.md规范
+# Texas Poker 统一测试执行脚本 v2.3
+# 基于重构后的功能域测试架构和TEST_STANDARDS.md规范
 set -e
 
 # 颜色定义
@@ -65,22 +65,52 @@ TESTS_FAILED=0
 TEST_SUMMARY=""
 
 # 详细模块测试统计变量
-# 后端统计变量
-BACKEND_UNIT_FILES=0
-BACKEND_UNIT_TESTS=0
-BACKEND_UNIT_TESTS_PASSED=0
-BACKEND_UNIT_TESTS_FAILED=0
-BACKEND_UNIT_TESTS_SKIPPED=0
-BACKEND_UNIT_PASSED=0
-BACKEND_UNIT_FAILED=0
-BACKEND_INTEGRATION_FILES=0
-BACKEND_INTEGRATION_TESTS=0
-BACKEND_INTEGRATION_TESTS_PASSED=0
-BACKEND_INTEGRATION_TESTS_FAILED=0
-BACKEND_INTEGRATION_TESTS_SKIPPED=0
-BACKEND_INTEGRATION_PASSED=0
-BACKEND_INTEGRATION_FAILED=0
+# 后端统计变量 - 改进版：区分三种文件状态
+# 游戏引擎测试
+BACKEND_GAME_FILES=0
+BACKEND_GAME_FILES_PASSED=0         # 文件中所有测试都通过
+BACKEND_GAME_FILES_FAILED=0         # 文件中有测试失败（但能运行）
+BACKEND_GAME_FILES_ERROR=0          # 文件无法运行（编译错误等）
+BACKEND_GAME_TESTS=0
+BACKEND_GAME_TESTS_PASSED=0
+BACKEND_GAME_TESTS_FAILED=0
+BACKEND_GAME_TESTS_SKIPPED=0
+
+# API接口测试
+BACKEND_API_FILES=0
+BACKEND_API_FILES_PASSED=0
+BACKEND_API_FILES_FAILED=0
+BACKEND_API_FILES_ERROR=0
+BACKEND_API_TESTS=0
+BACKEND_API_TESTS_PASSED=0
+BACKEND_API_TESTS_FAILED=0
+BACKEND_API_TESTS_SKIPPED=0
+
+# 实时通信测试
+BACKEND_REALTIME_FILES=0
+BACKEND_REALTIME_FILES_PASSED=0
+BACKEND_REALTIME_FILES_FAILED=0
+BACKEND_REALTIME_FILES_ERROR=0
+BACKEND_REALTIME_TESTS=0
+BACKEND_REALTIME_TESTS_PASSED=0
+BACKEND_REALTIME_TESTS_FAILED=0
+BACKEND_REALTIME_TESTS_SKIPPED=0
+
+# 数据存储测试
+BACKEND_STORAGE_FILES=0
+BACKEND_STORAGE_FILES_PASSED=0
+BACKEND_STORAGE_FILES_FAILED=0
+BACKEND_STORAGE_FILES_ERROR=0
+BACKEND_STORAGE_TESTS=0
+BACKEND_STORAGE_TESTS_PASSED=0
+BACKEND_STORAGE_TESTS_FAILED=0
+BACKEND_STORAGE_TESTS_SKIPPED=0
+
+# 后端总计
 BACKEND_TOTAL_FILES=0
+BACKEND_TOTAL_FILES_PASSED=0
+BACKEND_TOTAL_FILES_FAILED=0
+BACKEND_TOTAL_FILES_ERROR=0
 BACKEND_TOTAL_TESTS=0
 BACKEND_TOTAL_PASSED=0
 BACKEND_TOTAL_FAILED=0
@@ -120,7 +150,73 @@ FRONTEND_TOTAL_FAILED=0
 E2E_FILES=0
 E2E_TESTS=0
 
-# 解析Jest测试结果（后端）
+# 安全获取数字的辅助函数
+safe_number() {
+    local value="$1"
+    # 移除空白字符并检查是否为数字
+    value=$(echo "$value" | tr -d '\n\r\t ' | head -1)
+    if [[ "$value" =~ ^[0-9]+$ ]]; then
+        echo "$value"
+    else
+        echo "0"
+    fi
+}
+
+# 检测无法运行的测试文件（编译错误等）
+count_compilation_errors() {
+    local log_file="$1"
+    local error_count=0
+    
+    # 检测各种无法运行的模式
+    if [ -f "$log_file" ]; then
+        # 主要模式：Test suite failed to run
+        local suite_failed=$(safe_number "$(grep -c "Test suite failed to run" "$log_file" 2>/dev/null || echo "0")")
+        error_count=$((error_count + suite_failed))
+        
+        # 其他编译错误模式
+        local module_errors=$(safe_number "$(grep -c "Cannot find module" "$log_file" 2>/dev/null || echo "0")")
+        local syntax_errors=$(safe_number "$(grep -c "SyntaxError" "$log_file" 2>/dev/null || echo "0")")
+        local import_errors=$(safe_number "$(grep -c "TypeError.*import" "$log_file" 2>/dev/null || echo "0")")
+        local export_errors=$(safe_number "$(grep -c "has no default export" "$log_file" 2>/dev/null || echo "0")")
+        
+        # 如果有其他错误但没有suite failed，说明可能是其他类型的编译错误
+        local other_errors=$((module_errors + syntax_errors + import_errors + export_errors))
+        if [ $other_errors -gt 0 ] && [ $suite_failed -eq 0 ]; then
+            # 检查这些错误是否导致了FAIL但没有测试用例统计
+            local fail_files=$(safe_number "$(grep -c "^FAIL " "$log_file" 2>/dev/null || echo "0")")
+            local test_stats=$(safe_number "$(grep -c "Tests:" "$log_file" 2>/dev/null || echo "0")")
+            
+            # 如果有FAIL文件但没有测试统计，可能是编译错误
+            if [ $fail_files -gt 0 ] && [ $test_stats -eq 0 ]; then
+                error_count=$fail_files
+            fi
+        fi
+    fi
+    
+    echo $error_count
+}
+
+# 解析文件状态（改进版：区分三种状态）
+parse_file_status() {
+    local log_file="$1"
+    
+    if [ ! -f "$log_file" ]; then
+        echo "0 0 0 0"
+        return
+    fi
+    
+    # 统计各种状态
+    local files_all_passed=$(safe_number "$(grep -c "^PASS " "$log_file" 2>/dev/null || echo "0")")
+    local total_failed=$(safe_number "$(grep -c "^FAIL " "$log_file" 2>/dev/null || echo "0")")
+    local files_cannot_run=$(count_compilation_errors "$log_file")
+    
+    local files_some_failed=$((total_failed - files_cannot_run))
+    local total_files=$((files_all_passed + files_some_failed + files_cannot_run))
+    
+    echo "$total_files $files_all_passed $files_some_failed $files_cannot_run"
+}
+
+# 解析Jest测试结果（后端）- 改进版
 parse_jest_results() {
     local log_file="$1"
     local module_type="$2"
@@ -129,58 +225,63 @@ parse_jest_results() {
         return
     fi
     
-    # 解析总体统计
-    local test_suites_line=$(grep "Test Suites:" "$log_file" | tail -1)
-    local tests_line=$(grep "Tests:" "$log_file" | tail -1)
+    # 使用新的文件状态解析
+    local file_status=$(parse_file_status "$log_file")
+    local total_files=$(echo $file_status | cut -d' ' -f1)
+    local files_all_passed=$(echo $file_status | cut -d' ' -f2)
+    local files_some_failed=$(echo $file_status | cut -d' ' -f3)
+    local files_cannot_run=$(echo $file_status | cut -d' ' -f4)
     
-    if [ -n "$test_suites_line" ]; then
-        # 提取文件统计: "Test Suites: 7 failed, 3 passed, 10 total"
-        local total_files=$(echo "$test_suites_line" | grep -o '[0-9]\+ total' | grep -o '[0-9]\+')
-        local passed_files=$(echo "$test_suites_line" | grep -o '[0-9]\+ passed' | grep -o '[0-9]\+')
-        local failed_files=$(echo "$test_suites_line" | grep -o '[0-9]\+ failed' | grep -o '[0-9]\+')
-        
-        case "$module_type" in
-            "backend_unit")
-                BACKEND_UNIT_FILES=${total_files:-0}
-                BACKEND_UNIT_PASSED=${passed_files:-0}
-                BACKEND_UNIT_FAILED=${failed_files:-0}
-                ;;
-            "backend_integration")
-                BACKEND_INTEGRATION_FILES=${total_files:-0}
-                BACKEND_INTEGRATION_PASSED=${passed_files:-0}
-                BACKEND_INTEGRATION_FAILED=${failed_files:-0}
-                ;;
-            "backend_total")
-                BACKEND_TOTAL_FILES=${total_files:-0}
-                ;;
-        esac
-    fi
+    # 解析测试用例统计
+    local tests_line=$(grep "Tests:" "$log_file" | tail -1)
     
     if [ -n "$tests_line" ]; then
         # 提取测试统计: "Tests: 1 skipped, 25 passed, 26 total"
-        local total_tests=$(echo "$tests_line" | grep -o '[0-9]\+ total' | grep -o '[0-9]\+')
-        local passed_tests=$(echo "$tests_line" | grep -o '[0-9]\+ passed' | grep -o '[0-9]\+')
-        local failed_tests=$(echo "$tests_line" | grep -o '[0-9]\+ failed' | grep -o '[0-9]\+')
-        local skipped_tests=$(echo "$tests_line" | grep -o '[0-9]\+ skipped' | grep -o '[0-9]\+')
+        local total_tests=$(safe_number "$(echo "$tests_line" | grep -o '[0-9]\+ total' | grep -o '[0-9]\+')")
+        local passed_tests=$(safe_number "$(echo "$tests_line" | grep -o '[0-9]\+ passed' | grep -o '[0-9]\+')")
+        local failed_tests=$(safe_number "$(echo "$tests_line" | grep -o '[0-9]\+ failed' | grep -o '[0-9]\+')")
+        local skipped_tests=$(safe_number "$(echo "$tests_line" | grep -o '[0-9]\+ skipped' | grep -o '[0-9]\+')")
         
         case "$module_type" in
-            "backend_unit")
-                BACKEND_UNIT_TESTS=${total_tests:-0}
-                BACKEND_UNIT_TESTS_PASSED=${passed_tests:-0}
-                BACKEND_UNIT_TESTS_FAILED=${failed_tests:-0}
-                BACKEND_UNIT_TESTS_SKIPPED=${skipped_tests:-0}
+            "game")
+                BACKEND_GAME_FILES=$total_files
+                BACKEND_GAME_FILES_PASSED=$files_all_passed
+                BACKEND_GAME_FILES_FAILED=$files_some_failed
+                BACKEND_GAME_FILES_ERROR=$files_cannot_run
+                BACKEND_GAME_TESTS=$total_tests
+                BACKEND_GAME_TESTS_PASSED=$passed_tests
+                BACKEND_GAME_TESTS_FAILED=$failed_tests
+                BACKEND_GAME_TESTS_SKIPPED=$skipped_tests
                 ;;
-            "backend_integration")
-                BACKEND_INTEGRATION_TESTS=${total_tests:-0}
-                BACKEND_INTEGRATION_TESTS_PASSED=${passed_tests:-0}
-                BACKEND_INTEGRATION_TESTS_FAILED=${failed_tests:-0}
-                BACKEND_INTEGRATION_TESTS_SKIPPED=${skipped_tests:-0}
+            "api")
+                BACKEND_API_FILES=$total_files
+                BACKEND_API_FILES_PASSED=$files_all_passed
+                BACKEND_API_FILES_FAILED=$files_some_failed
+                BACKEND_API_FILES_ERROR=$files_cannot_run
+                BACKEND_API_TESTS=$total_tests
+                BACKEND_API_TESTS_PASSED=$passed_tests
+                BACKEND_API_TESTS_FAILED=$failed_tests
+                BACKEND_API_TESTS_SKIPPED=$skipped_tests
                 ;;
-            "backend_total")
-                BACKEND_TOTAL_TESTS=${total_tests:-0}
-                BACKEND_TOTAL_PASSED=${passed_tests:-0}
-                BACKEND_TOTAL_FAILED=${failed_tests:-0}
-                BACKEND_TOTAL_SKIPPED=${skipped_tests:-0}
+            "realtime")
+                BACKEND_REALTIME_FILES=$total_files
+                BACKEND_REALTIME_FILES_PASSED=$files_all_passed
+                BACKEND_REALTIME_FILES_FAILED=$files_some_failed
+                BACKEND_REALTIME_FILES_ERROR=$files_cannot_run
+                BACKEND_REALTIME_TESTS=$total_tests
+                BACKEND_REALTIME_TESTS_PASSED=$passed_tests
+                BACKEND_REALTIME_TESTS_FAILED=$failed_tests
+                BACKEND_REALTIME_TESTS_SKIPPED=$skipped_tests
+                ;;
+            "storage")
+                BACKEND_STORAGE_FILES=$total_files
+                BACKEND_STORAGE_FILES_PASSED=$files_all_passed
+                BACKEND_STORAGE_FILES_FAILED=$files_some_failed
+                BACKEND_STORAGE_FILES_ERROR=$files_cannot_run
+                BACKEND_STORAGE_TESTS=$total_tests
+                BACKEND_STORAGE_TESTS_PASSED=$passed_tests
+                BACKEND_STORAGE_TESTS_FAILED=$failed_tests
+                BACKEND_STORAGE_TESTS_SKIPPED=$skipped_tests
                 ;;
         esac
     fi
@@ -342,27 +443,59 @@ run_backend_tests() {
     # 解析总体测试结果
     parse_jest_results "../$backend_all_log" "backend_total"
     
-    # 单独运行单元测试
-    log_info "检查单元测试..."
-    local backend_unit_log="$CURRENT_LOG_DIR/backend_unit_tests.log"
-    if npm test -- --testPathPattern="__tests__/unit" > "../$backend_unit_log" 2>&1; then
-        record_test_result "Backend Unit Tests" "pass"
+    # 按功能域运行测试
+    log_info "检查游戏引擎测试..."
+    local backend_game_log="$CURRENT_LOG_DIR/backend_game_tests.log"
+    if npm test -- --testPathPattern="__tests__/game" > "../$backend_game_log" 2>&1; then
+        record_test_result "Backend Game Tests" "pass"
     else
-        record_test_result "Backend Unit Tests" "fail" "$backend_unit_log"
+        record_test_result "Backend Game Tests" "fail" "$backend_game_log"
     fi
-    # 解析单元测试结果
-    parse_jest_results "../$backend_unit_log" "backend_unit"
+    # 解析游戏测试结果（复用unit结构）
+    parse_jest_results "../$backend_game_log" "game"
     
-    # 单独运行集成测试
-    log_info "检查集成测试..."
-    local backend_integration_log="$CURRENT_LOG_DIR/backend_integration_tests.log"
-    if npm test -- --testPathPattern="__tests__/integration" > "../$backend_integration_log" 2>&1; then
-        record_test_result "Backend Integration Tests" "pass"
+    # 运行API接口测试
+    log_info "检查API接口测试..."
+    local backend_api_log="$CURRENT_LOG_DIR/backend_api_tests.log"
+    if npm test -- --testPathPattern="__tests__/api" > "../$backend_api_log" 2>&1; then
+        record_test_result "Backend API Tests" "pass"
     else
-        record_test_result "Backend Integration Tests" "fail" "$backend_integration_log"
+        record_test_result "Backend API Tests" "fail" "$backend_api_log"
     fi
-    # 解析集成测试结果
-    parse_jest_results "../$backend_integration_log" "backend_integration"
+    # 解析API测试结果（复用integration结构）
+    parse_jest_results "../$backend_api_log" "api"
+    
+    # 运行实时通信测试
+    log_info "检查实时通信测试..."
+    local backend_realtime_log="$CURRENT_LOG_DIR/backend_realtime_tests.log"
+    if npm test -- --testPathPattern="__tests__/realtime" > "../$backend_realtime_log" 2>&1; then
+        record_test_result "Backend Realtime Tests" "pass"
+    else
+        record_test_result "Backend Realtime Tests" "fail" "$backend_realtime_log"
+    fi
+    # 解析实时通信测试结果
+    parse_jest_results "../$backend_realtime_log" "realtime"
+    
+    # 运行数据存储测试
+    log_info "检查数据存储测试..."
+    local backend_storage_log="$CURRENT_LOG_DIR/backend_storage_tests.log"
+    if npm test -- --testPathPattern="__tests__/storage" > "../$backend_storage_log" 2>&1; then
+        record_test_result "Backend Storage Tests" "pass"
+    else
+        record_test_result "Backend Storage Tests" "fail" "$backend_storage_log"
+    fi
+    # 解析存储测试结果（复用flow结构）
+    parse_jest_results "../$backend_storage_log" "storage"
+    
+    # 计算后端总计统计
+    BACKEND_TOTAL_FILES=$((BACKEND_GAME_FILES + BACKEND_API_FILES + BACKEND_REALTIME_FILES + BACKEND_STORAGE_FILES))
+    BACKEND_TOTAL_FILES_PASSED=$((BACKEND_GAME_FILES_PASSED + BACKEND_API_FILES_PASSED + BACKEND_REALTIME_FILES_PASSED + BACKEND_STORAGE_FILES_PASSED))
+    BACKEND_TOTAL_FILES_FAILED=$((BACKEND_GAME_FILES_FAILED + BACKEND_API_FILES_FAILED + BACKEND_REALTIME_FILES_FAILED + BACKEND_STORAGE_FILES_FAILED))
+    BACKEND_TOTAL_FILES_ERROR=$((BACKEND_GAME_FILES_ERROR + BACKEND_API_FILES_ERROR + BACKEND_REALTIME_FILES_ERROR + BACKEND_STORAGE_FILES_ERROR))
+    BACKEND_TOTAL_TESTS=$((BACKEND_GAME_TESTS + BACKEND_API_TESTS + BACKEND_REALTIME_TESTS + BACKEND_STORAGE_TESTS))
+    BACKEND_TOTAL_PASSED=$((BACKEND_GAME_TESTS_PASSED + BACKEND_API_TESTS_PASSED + BACKEND_REALTIME_TESTS_PASSED + BACKEND_STORAGE_TESTS_PASSED))
+    BACKEND_TOTAL_FAILED=$((BACKEND_GAME_TESTS_FAILED + BACKEND_API_TESTS_FAILED + BACKEND_REALTIME_TESTS_FAILED + BACKEND_STORAGE_TESTS_FAILED))
+    BACKEND_TOTAL_SKIPPED=$((BACKEND_GAME_TESTS_SKIPPED + BACKEND_API_TESTS_SKIPPED + BACKEND_REALTIME_TESTS_SKIPPED + BACKEND_STORAGE_TESTS_SKIPPED))
     
     # 运行测试覆盖率
     log_info "生成测试覆盖率报告..."
@@ -513,16 +646,38 @@ generate_detailed_stats() {
         echo "  🧪 测试用例: $BACKEND_TOTAL_TESTS (通过: $BACKEND_TOTAL_PASSED, 失败: $BACKEND_TOTAL_FAILED, 跳过: $BACKEND_TOTAL_SKIPPED)"
     fi
     
-    if [ "$BACKEND_UNIT_FILES" -gt 0 ]; then
-        echo "单元测试:"
-        echo "  📁 测试文件: $BACKEND_UNIT_FILES (通过: $BACKEND_UNIT_PASSED, 失败: $BACKEND_UNIT_FAILED)"
-        echo "  🧪 测试用例: $BACKEND_UNIT_TESTS (通过: $BACKEND_UNIT_TESTS_PASSED, 失败: $BACKEND_UNIT_TESTS_FAILED, 跳过: $BACKEND_UNIT_TESTS_SKIPPED)"
+    if [ "$BACKEND_GAME_FILES" -gt 0 ]; then
+        echo "游戏引擎测试:"
+        echo "  📁 测试文件: $BACKEND_GAME_FILES (🟢通过: $BACKEND_GAME_FILES_PASSED, 🟡失败: $BACKEND_GAME_FILES_FAILED, 🔴无法运行: $BACKEND_GAME_FILES_ERROR)"
+        echo "  🧪 测试用例: $BACKEND_GAME_TESTS (通过: $BACKEND_GAME_TESTS_PASSED, 失败: $BACKEND_GAME_TESTS_FAILED, 跳过: $BACKEND_GAME_TESTS_SKIPPED)"
     fi
     
-    if [ "$BACKEND_INTEGRATION_FILES" -gt 0 ]; then
-        echo "集成测试:"
-        echo "  📁 测试文件: $BACKEND_INTEGRATION_FILES (通过: $BACKEND_INTEGRATION_PASSED, 失败: $BACKEND_INTEGRATION_FAILED)"
-        echo "  🧪 测试用例: $BACKEND_INTEGRATION_TESTS (通过: $BACKEND_INTEGRATION_TESTS_PASSED, 失败: $BACKEND_INTEGRATION_TESTS_FAILED, 跳过: $BACKEND_INTEGRATION_TESTS_SKIPPED)"
+    if [ "$BACKEND_API_FILES" -gt 0 ]; then
+        echo "API接口测试:"
+        echo "  📁 测试文件: $BACKEND_API_FILES (🟢通过: $BACKEND_API_FILES_PASSED, 🟡失败: $BACKEND_API_FILES_FAILED, 🔴无法运行: $BACKEND_API_FILES_ERROR)"
+        echo "  🧪 测试用例: $BACKEND_API_TESTS (通过: $BACKEND_API_TESTS_PASSED, 失败: $BACKEND_API_TESTS_FAILED, 跳过: $BACKEND_API_TESTS_SKIPPED)"
+    fi
+    
+    if [ "$BACKEND_REALTIME_FILES" -gt 0 ]; then
+        echo "实时通信测试:"
+        echo "  📁 测试文件: $BACKEND_REALTIME_FILES (🟢通过: $BACKEND_REALTIME_FILES_PASSED, 🟡失败: $BACKEND_REALTIME_FILES_FAILED, 🔴无法运行: $BACKEND_REALTIME_FILES_ERROR)"
+        echo "  🧪 测试用例: $BACKEND_REALTIME_TESTS (通过: $BACKEND_REALTIME_TESTS_PASSED, 失败: $BACKEND_REALTIME_TESTS_FAILED, 跳过: $BACKEND_REALTIME_TESTS_SKIPPED)"
+    fi
+    
+    if [ "$BACKEND_STORAGE_FILES" -gt 0 ]; then
+        echo "数据存储测试:"
+        echo "  📁 测试文件: $BACKEND_STORAGE_FILES (🟢通过: $BACKEND_STORAGE_FILES_PASSED, 🟡失败: $BACKEND_STORAGE_FILES_FAILED, 🔴无法运行: $BACKEND_STORAGE_FILES_ERROR)"
+        echo "  🧪 测试用例: $BACKEND_STORAGE_TESTS (通过: $BACKEND_STORAGE_TESTS_PASSED, 失败: $BACKEND_STORAGE_TESTS_FAILED, 跳过: $BACKEND_STORAGE_TESTS_SKIPPED)"
+    fi
+    
+    # 验证数学一致性
+    local calculated_files=$((BACKEND_UNIT_FILES + BACKEND_INTEGRATION_FILES + BACKEND_FLOW_FILES))
+    local calculated_tests=$((BACKEND_UNIT_TESTS + BACKEND_INTEGRATION_TESTS + BACKEND_FLOW_TESTS))
+    
+    if [ "$calculated_files" -ne "$BACKEND_TOTAL_FILES" ] || [ "$calculated_tests" -ne "$BACKEND_TOTAL_TESTS" ]; then
+        echo "⚠️  统计验证:"
+        echo "  计算值: 文件 $calculated_files, 测试 $calculated_tests"
+        echo "  实际值: 文件 $BACKEND_TOTAL_FILES, 测试 $BACKEND_TOTAL_TESTS"
     fi
     echo
     
@@ -614,11 +769,11 @@ generate_report() {
     # 保存报告到日志目录
     local report_file="$CURRENT_LOG_DIR/test_report.md"
     cat > "$report_file" << EOF
-# Texas Poker 测试执行报告 v2.2
+# Texas Poker 测试执行报告 v2.3
 
 **执行时间**: $(date)  
 **日志目录**: $CURRENT_LOG_DIR  
-**测试架构**: 基于重构后的统一测试目录结构  
+**测试架构**: 基于重构后的功能域测试目录结构  
 **规范文档**: TEST_STANDARDS.md
 
 ## 测试结果汇总
@@ -631,20 +786,32 @@ $TEST_SUMMARY
 
 $(if [ "$BACKEND_TOTAL_FILES" -gt 0 ]; then
 echo "**总体统计:**
-- 📁 测试文件: $BACKEND_TOTAL_FILES
+- 📁 测试文件: $BACKEND_TOTAL_FILES (🟢通过: $BACKEND_TOTAL_FILES_PASSED, 🟡失败: $BACKEND_TOTAL_FILES_FAILED, 🔴无法运行: $BACKEND_TOTAL_FILES_ERROR)
 - 🧪 测试用例: $BACKEND_TOTAL_TESTS (通过: $BACKEND_TOTAL_PASSED, 失败: $BACKEND_TOTAL_FAILED, 跳过: $BACKEND_TOTAL_SKIPPED)"
 fi)
 
-$(if [ "$BACKEND_UNIT_FILES" -gt 0 ]; then
-echo "**单元测试:**
-- 📁 测试文件: $BACKEND_UNIT_FILES (通过: $BACKEND_UNIT_PASSED, 失败: $BACKEND_UNIT_FAILED)
-- 🧪 测试用例: $BACKEND_UNIT_TESTS (通过: $BACKEND_UNIT_TESTS_PASSED, 失败: $BACKEND_UNIT_TESTS_FAILED, 跳过: $BACKEND_UNIT_TESTS_SKIPPED)"
+$(if [ "$BACKEND_GAME_FILES" -gt 0 ]; then
+echo "**游戏引擎测试:**
+- 📁 测试文件: $BACKEND_GAME_FILES (🟢通过: $BACKEND_GAME_FILES_PASSED, 🟡失败: $BACKEND_GAME_FILES_FAILED, 🔴无法运行: $BACKEND_GAME_FILES_ERROR)
+- 🧪 测试用例: $BACKEND_GAME_TESTS (通过: $BACKEND_GAME_TESTS_PASSED, 失败: $BACKEND_GAME_TESTS_FAILED, 跳过: $BACKEND_GAME_TESTS_SKIPPED)"
 fi)
 
-$(if [ "$BACKEND_INTEGRATION_FILES" -gt 0 ]; then
-echo "**集成测试:**
-- 📁 测试文件: $BACKEND_INTEGRATION_FILES (通过: $BACKEND_INTEGRATION_PASSED, 失败: $BACKEND_INTEGRATION_FAILED)
-- 🧪 测试用例: $BACKEND_INTEGRATION_TESTS (通过: $BACKEND_INTEGRATION_TESTS_PASSED, 失败: $BACKEND_INTEGRATION_TESTS_FAILED, 跳过: $BACKEND_INTEGRATION_TESTS_SKIPPED)"
+$(if [ "$BACKEND_API_FILES" -gt 0 ]; then
+echo "**API接口测试:**
+- 📁 测试文件: $BACKEND_API_FILES (🟢通过: $BACKEND_API_FILES_PASSED, 🟡失败: $BACKEND_API_FILES_FAILED, 🔴无法运行: $BACKEND_API_FILES_ERROR)
+- 🧪 测试用例: $BACKEND_API_TESTS (通过: $BACKEND_API_TESTS_PASSED, 失败: $BACKEND_API_TESTS_FAILED, 跳过: $BACKEND_API_TESTS_SKIPPED)"
+fi)
+
+$(if [ "$BACKEND_REALTIME_FILES" -gt 0 ]; then
+echo "**实时通信测试:**
+- 📁 测试文件: $BACKEND_REALTIME_FILES (🟢通过: $BACKEND_REALTIME_FILES_PASSED, 🟡失败: $BACKEND_REALTIME_FILES_FAILED, 🔴无法运行: $BACKEND_REALTIME_FILES_ERROR)
+- 🧪 测试用例: $BACKEND_REALTIME_TESTS (通过: $BACKEND_REALTIME_TESTS_PASSED, 失败: $BACKEND_REALTIME_TESTS_FAILED, 跳过: $BACKEND_REALTIME_TESTS_SKIPPED)"
+fi)
+
+$(if [ "$BACKEND_STORAGE_FILES" -gt 0 ]; then
+echo "**数据存储测试:**
+- 📁 测试文件: $BACKEND_STORAGE_FILES (🟢通过: $BACKEND_STORAGE_FILES_PASSED, 🟡失败: $BACKEND_STORAGE_FILES_FAILED, 🔴无法运行: $BACKEND_STORAGE_FILES_ERROR)
+- 🧪 测试用例: $BACKEND_STORAGE_TESTS (通过: $BACKEND_STORAGE_TESTS_PASSED, 失败: $BACKEND_STORAGE_TESTS_FAILED, 跳过: $BACKEND_STORAGE_TESTS_SKIPPED)"
 fi)
 
 ### 🎨 前端测试统计
@@ -692,7 +859,7 @@ fi)
 - 📈 通过率: $(( TESTS_PASSED * 100 / (TESTS_PASSED + TESTS_FAILED) ))%
 
 ## 测试架构
-- 🔧 后端: \`__tests__/{unit,integration,flow}\` + Jest
+- 🔧 后端: \`__tests__/{game,api,realtime,storage,shared}\` + Jest
 - 🎨 前端: \`__tests__/{components,pages,hooks,services}\` + Vitest + React Testing Library  
 - 🎭 E2E: \`e2e-tests/\` + Playwright
 
@@ -709,8 +876,10 @@ fi)
 \`\`\`
 $CURRENT_LOG_DIR/
 ├── backend_all_tests.log      # 后端所有测试
-├── backend_unit_tests.log     # 后端单元测试
-├── backend_integration_tests.log # 后端集成测试
+├── backend_game_tests.log     # 后端游戏引擎测试
+├── backend_api_tests.log      # 后端API接口测试
+├── backend_realtime_tests.log # 后端实时通信测试
+├── backend_storage_tests.log  # 后端数据存储测试
 ├── backend_coverage.log       # 后端覆盖率
 ├── frontend_components.log    # 前端组件测试
 ├── frontend_pages.log         # 前端页面测试
@@ -862,11 +1031,11 @@ run_coverage_only() {
 run_quick_tests() {
     log_info "⚡ 运行快速测试套件..."
     
-    # 只运行单元测试，跳过集成测试和E2E
+    # 只运行游戏引擎测试，跳过复杂的集成测试和E2E
     cd backend
-    log_info "后端单元测试..."
+    log_info "后端核心测试（游戏引擎）..."
     local backend_quick_log="$CURRENT_LOG_DIR/backend_quick.log"
-    if npm test -- --testPathPattern="__tests__/unit" > "../$backend_quick_log" 2>&1; then
+    if npm test -- --testPathPattern="__tests__/game" > "../$backend_quick_log" 2>&1; then
         record_test_result "Backend Quick Tests" "pass"
     else
         record_test_result "Backend Quick Tests" "fail" "$backend_quick_log"
@@ -958,8 +1127,8 @@ clean_root_logs() {
 
 # 主函数
 main() {
-    echo -e "${BLUE}🧪 Texas Poker 统一测试执行脚本 v2.2${NC}"
-    echo -e "${BLUE}基于重构后的测试架构和TEST_STANDARDS.md规范${NC}"
+    echo -e "${BLUE}🧪 Texas Poker 统一测试执行脚本 v2.3${NC}"
+    echo -e "${BLUE}基于重构后的功能域测试架构和TEST_STANDARDS.md规范${NC}"
     echo "========================================"
     echo
     
