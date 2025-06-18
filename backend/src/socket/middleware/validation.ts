@@ -334,7 +334,9 @@ export class ValidationMiddleware {
 // 创建全局验证实例
 export const validationMiddleware = new ValidationMiddleware();
 
-// 定期清理过期计数器
-setInterval(() => {
-  validationMiddleware.cleanup();
-}, 60000); // 每分钟清理一次
+// 定期清理过期计数器 - 只在非测试环境运行
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    validationMiddleware.cleanup();
+  }, 60000); // 每分钟清理一次
+}

@@ -50,11 +50,18 @@ export class MockFactory {
       exists: jest.fn(),
       expire: jest.fn(),
       ttl: jest.fn(),
-      lpush: jest.fn(),
+      lPush: jest.fn(),
+      lpush: jest.fn(), // Keep both for compatibility
+      rPush: jest.fn(),
       rpush: jest.fn(),
+      lPop: jest.fn(),
       lpop: jest.fn(),
+      rPop: jest.fn(),
       rpop: jest.fn(),
-      lrange: jest.fn(),
+      lRange: jest.fn(),
+      lrange: jest.fn(), // Keep both for compatibility
+      lTrim: jest.fn(),
+      ltrim: jest.fn(),
       connect: jest.fn(),
       disconnect: jest.fn(),
       quit: jest.fn(),
@@ -89,7 +96,9 @@ export class MockFactory {
       once: jest.fn(),
       off: jest.fn(),
       disconnect: jest.fn(),
-      rooms: new Set()
+      rooms: new Set(),
+      // Add bcrypt support to socket
+      bcrypt: null as any // Will be injected in createRoomHandlerMocks
     };
   }
 
@@ -199,7 +208,7 @@ export class MockFactory {
    * 为单元测试提供完整的Mock环境
    */
   static createRoomHandlerMocks() {
-    return {
+    const mocks = {
       prisma: this.createPrismaMock(),
       redis: this.createRedisMock(),
       socket: this.createSocketMock(),
@@ -209,6 +218,11 @@ export class MockFactory {
       bcrypt: this.createBcryptMock(),
       callback: this.createCallbackMock()
     };
+    
+    // Inject bcrypt into socket for compatibility
+    mocks.socket.bcrypt = mocks.bcrypt;
+    
+    return mocks;
   }
 
   /**

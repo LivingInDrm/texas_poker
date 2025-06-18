@@ -270,7 +270,9 @@ describe('ValidationMiddleware', () => {
 
       // 设置行动历史，模拟重复模式
       const actionHistory = ['call:0', 'raise:100', 'call:0', 'raise:100'];
-      await redisClient.lpush(`action_history:${testUser.id}:${testRoom.id}`, ...actionHistory);
+      for (const action of actionHistory) {
+        await redisClient.lPush(`action_history:${testUser.id}:${testRoom.id}`, action);
+      }
 
       const result = await validationMiddleware.validatePlayerAction(
         mockSocket as AuthenticatedSocket,

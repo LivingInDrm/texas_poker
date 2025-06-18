@@ -14,7 +14,7 @@ const roomJoin = async (socket: any, data: any, callback: Function) => {
 
   try {
     // 1. 验证房间加入请求
-    const validationResult = await socket.validationMiddleware.validateRoomJoin(data);
+    const validationResult = await socket.validationMiddleware.validateRoomJoin(socket, roomId, password);
     if (!validationResult.valid) {
       return callback({
         success: false,
@@ -173,6 +173,12 @@ const roomJoin = async (socket: any, data: any, callback: Function) => {
 describe('roomHandlers.join - 房间加入功能单元测试', () => {
   let mocks: any;
 
+  // 辅助函数：同步socket数据和测试数据
+  const syncSocketWithTestData = (socket: any, testData: any) => {
+    socket.data.userId = testData.user.id;
+    socket.data.username = testData.user.username;
+  };
+
   beforeEach(() => {
     // 创建完整的Mock环境
     mocks = MockFactory.createRoomHandlerMocks();
@@ -183,6 +189,7 @@ describe('roomHandlers.join - 房间加入功能单元测试', () => {
     mocks.socket.userStateService = mocks.userStateService;
     mocks.socket.validationMiddleware = mocks.validationMiddleware;
     mocks.socket.io = mocks.io;
+    mocks.socket.bcrypt = mocks.bcrypt;
     
     // 重置数据生成器
     TestDataGenerator.resetCounter();
@@ -195,22 +202,31 @@ describe('roomHandlers.join - 房间加入功能单元测试', () => {
 
   describe('成功场景', () => {
     it('应该成功加入一个有空位的房间', async () => {
-      // 1. 生成测试数据
+      // 1. 生成测试数据和空房间状态
       const testData = TestDataGenerator.createScenarioData('room-join-success');
+      // 创建一个空的房间状态，不包含测试用户
+      const emptyRoomState = RoomStateFactory.createBasicRoomState({
+        id: testData.room.id,
+        ownerId: testData.room.ownerId,
+        players: [] // 空房间
+      });
       
-      // 2. 配置Mock返回值
-      MockDataConfigurator.configureAllMocks(mocks, testData);
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
+      // 3. 配置Mock返回值
+      MockDataConfigurator.configureAllMocks(mocks, { ...testData, roomState: null }); // 无房间状态，需要初始化
       mocks.validationMiddleware.validateRoomJoin.mockResolvedValue({ valid: true });
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ success: true });
       
-      // 3. 执行测试
+      // 4. 执行测试
       await roomJoin(mocks.socket, testData.eventData, mocks.callback);
       
-      // 4. 验证结果
+      // 5. 验证结果
       SocketTestHelper.expectSuccessCallback(mocks.callback);
       SocketTestHelper.expectSocketJoin(mocks.socket, testData.eventData.roomId);
       
-      // 5. 验证Mock调用
+      // 6. 验证Mock调用
       expect(mocks.prisma.room.findUnique).toHaveBeenCalledWith({
         where: { id: testData.eventData.roomId },
         include: { owner: true }
@@ -224,6 +240,10 @@ describe('roomHandlers.join - 房间加入功能单元测试', () => {
     it('应该能重连到已加入的房间', async () => {
       // 1. 生成重连场景数据
       const testData = TestDataGenerator.createScenarioData('room-join-success');
+      
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
       const roomState = RoomStateFactory.createBasicRoomState({
         players: [{
           id: testData.user.id,
@@ -235,17 +255,17 @@ describe('roomHandlers.join - 房间加入功能单元测试', () => {
         }]
       });
       
-      // 2. 配置Mock
+      // 3. 配置Mock
       MockDataConfigurator.configureAllMocks(mocks, testData);
       mocks.redis.get.mockResolvedValue(JSON.stringify(roomState));
       mocks.validationMiddleware.validateRoomJoin.mockResolvedValue({ valid: true });
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ success: true });
       
-      // 3. 执行测试
+      // 4. 执行测试
       await roomJoin(mocks.socket, testData.eventData, mocks.callback);
       
-      // 4. 验证重连成功
-      SocketTestHelper.expectSuccessCallback(mocks.callback, 'Rejoined room successfully');
+      // 5. 验证重连成功
+      SocketTestHelper.expectSuccessCallback(mocks.callback, undefined, 'Rejoined room successfully');
       expect(mocks.socket.data.roomId).toBe(testData.eventData.roomId);
     });
   });
@@ -255,16 +275,19 @@ describe('roomHandlers.join - 房间加入功能单元测试', () => {
       // 1. 生成密码房间数据
       const testData = TestDataGenerator.createScenarioData('room-join-password');
       
-      // 2. 配置Mock
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
+      // 3. 配置Mock
       MockDataConfigurator.configureAllMocks(mocks, testData);
       mocks.validationMiddleware.validateRoomJoin.mockResolvedValue({ valid: true });
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ success: true });
       mocks.bcrypt.compare.mockResolvedValue(true); // 密码正确
       
-      // 3. 执行测试
+      // 4. 执行测试
       await roomJoin(mocks.socket, testData.eventData, mocks.callback);
       
-      // 4. 验证结果
+      // 5. 验证结果
       SocketTestHelper.expectSuccessCallback(mocks.callback);
       expect(mocks.bcrypt.compare).toHaveBeenCalledWith(
         testData.eventData.password,
@@ -276,16 +299,19 @@ describe('roomHandlers.join - 房间加入功能单元测试', () => {
       // 1. 生成密码错误场景
       const testData = TestDataGenerator.createScenarioData('room-join-password');
       
-      // 2. 配置Mock
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
+      // 3. 配置Mock
       MockDataConfigurator.configureAllMocks(mocks, testData);
       mocks.validationMiddleware.validateRoomJoin.mockResolvedValue({ valid: true });
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ success: true });
       mocks.bcrypt.compare.mockResolvedValue(false); // 密码错误
       
-      // 3. 执行测试
+      // 4. 执行测试
       await roomJoin(mocks.socket, testData.eventData, mocks.callback);
       
-      // 4. 验证错误响应
+      // 5. 验证错误响应
       SocketTestHelper.expectErrorCallback(mocks.callback, 'Invalid password');
     });
 
@@ -346,6 +372,10 @@ describe('roomHandlers.join - 房间加入功能单元测试', () => {
     it('应该拒绝重复加入已在线的房间', async () => {
       // 1. 生成已在房间场景
       const testData = TestDataGenerator.createScenarioData('room-join-success');
+      
+      // 2. 同步socket数据和测试数据
+      syncSocketWithTestData(mocks.socket, testData);
+      
       const roomStateWithUser = RoomStateFactory.createBasicRoomState({
         players: [{
           id: testData.user.id,
@@ -357,16 +387,16 @@ describe('roomHandlers.join - 房间加入功能单元测试', () => {
         }]
       });
       
-      // 2. 配置Mock
+      // 3. 配置Mock
       MockDataConfigurator.configureAllMocks(mocks, testData);
       mocks.redis.get.mockResolvedValue(JSON.stringify(roomStateWithUser));
       mocks.validationMiddleware.validateRoomJoin.mockResolvedValue({ valid: true });
       mocks.userStateService.checkAndHandleRoomConflict.mockResolvedValue({ success: true });
       
-      // 3. 执行测试
+      // 4. 执行测试
       await roomJoin(mocks.socket, testData.eventData, mocks.callback);
       
-      // 4. 验证错误响应
+      // 5. 验证错误响应
       SocketTestHelper.expectErrorCallback(mocks.callback, 'Already in room');
     });
   });
