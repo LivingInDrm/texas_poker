@@ -341,7 +341,7 @@ export function setupRoomHandlers(
         include: { owner: true }
       });
 
-      let targetRoom = null;
+      let targetRoom: any = null;
       let roomState: RoomState | null = null;
 
       // 查找有空位的房间
@@ -430,6 +430,15 @@ export function setupRoomHandlers(
 
         roomState!.players.push(newPlayer);
         roomState!.currentPlayerCount = roomState!.players.length;
+      }
+
+      // 验证targetRoom是否存在
+      if (!targetRoom) {
+        return callback({
+          success: false,
+          error: 'Failed to find or create room',
+          message: 'Room creation failed'
+        });
       }
 
       // 加入socket房间

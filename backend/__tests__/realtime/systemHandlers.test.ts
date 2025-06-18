@@ -1,41 +1,30 @@
 import { Server as SocketIOServer } from 'socket.io';
-import { setupSystemHandlers } from '@/socket/handlers/systemHandlers';
-import { userStateService } from '@/services/userStateService';
-import { redisClient } from '@/db';
+import { setupSystemHandlers } from '../../src/socket/handlers/systemHandlers';
+import { userStateService } from '../../src/services/userStateService';
+import { redisClient } from '../../src/db';
 import {
   AuthenticatedSocket,
   SOCKET_EVENTS,
   RoomState
-} from '@/types/socket';
+} from '../../src/types/socket';
 
 // Mock dependencies
-jest.mock('../../../src/services/userStateService');
-jest.mock('../../../src/db');
+jest.mock('../../src/services/userStateService');
+jest.mock('../../src/db');
 
 // Mock types for testing
-const mockSocket = {
-  data: {
-    userId: 'test-user-id',
-    username: 'test-user'
-  },
-  emit: jest.fn(),
-  on: jest.fn(),
-  join: jest.fn(),
-  to: jest.fn().mockReturnValue({
-    emit: jest.fn()
-  }),
-  connected: true
-} as unknown as AuthenticatedSocket;
-
-const mockIo = {
-  emit: jest.fn()
-} as unknown as SocketIOServer;
+let mockSocket: any;
+let mockIo: any;
 
 const mockRoomState: RoomState = {
   id: 'test-room-id',
-  status: 'waiting',
+  ownerId: 'test-owner-id',
+  status: 'WAITING' as const,
   maxPlayers: 6,
   currentPlayerCount: 2,
+  hasPassword: false,
+  bigBlind: 20,
+  smallBlind: 10,
   players: [
     {
       id: 'test-user-id',
@@ -45,20 +34,34 @@ const mockRoomState: RoomState = {
       isReady: false,
       position: 0,
       isConnected: false,
-      lastAction: null
+      lastAction: undefined
     }
   ],
-  gameStarted: false,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString()
+  gameStarted: false
 };
 
 describe('System Handlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset socket event handlers
-    (mockSocket.on as jest.Mock).mockClear();
-    (mockSocket.emit as jest.Mock).mockClear();
+    
+    // Create fresh Mock objects for each test
+    mockSocket = {
+      data: {
+        userId: 'test-user-id',
+        username: 'test-user'
+      },
+      emit: jest.fn(),
+      on: jest.fn(),
+      join: jest.fn(),
+      to: jest.fn().mockReturnValue({
+        emit: jest.fn()
+      }),
+      connected: true
+    } as unknown as AuthenticatedSocket;
+
+    mockIo = {
+      emit: jest.fn()
+    } as unknown as SocketIOServer;
   });
 
   describe('GET_USER_CURRENT_ROOM event handler', () => {
@@ -108,7 +111,7 @@ describe('System Handlers', () => {
             isGameStarted: false,
             roomState: {
               id: roomId,
-              status: 'waiting',
+              status: 'WAITING' as const,
               maxPlayers: 6,
               currentPlayerCount: 2
             }
@@ -305,7 +308,7 @@ describe('System Handlers', () => {
       setupSystemHandlers(mockSocket, mockIo);
       
       // Emit should be replaced and rate limited
-      const result = mockSocket.emit('test-event', 'test-data');
+      const result = (mockSocket.emit as any)('test-event', 'test-data');
       
       expect(mockValidationMiddleware.validateMessageRate).toHaveBeenCalledWith('test-user-id');
       expect(result).toBe(false);

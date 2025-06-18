@@ -37,6 +37,7 @@ export interface ClientToServerEvents {
   // 系统相关事件
   'ping': (callback: (response: number) => void) => void;
   'reconnect_attempt': (data: { roomId?: string }) => void;
+  'GET_USER_CURRENT_ROOM': (data: any, callback: (response: any) => void) => void;
 }
 
 export interface InterServerEvents {

@@ -190,60 +190,60 @@ export function setupSystemHandlers(
   //   console.log(`Heartbeat from ${socket.data.username}: ${latency}ms`);
   // });
 
-  // 获取用户当前房间状态 - 临时注释解决类型问题
-  // socket.on('GET_USER_CURRENT_ROOM', async (data, callback) => {
-  //   const { userId } = socket.data;
-  //
-  //   try {
-  //     const currentRoomId = await userStateService.getUserCurrentRoom(userId);
-  //     
-  //     if (!currentRoomId) {
-  //       return callback({
-  //         success: true,
-  //         data: { roomId: null }
-  //       });
-  //     }
-  //
-  //     // 获取房间详细信息
-  //     const roomData = await redisClient.get(`room:${currentRoomId}`);
-  //     if (!roomData) {
-  //       // 房间不存在，清理用户状态
-  //       await userStateService.clearUserCurrentRoom(userId);
-  //       return callback({
-  //         success: true,
-  //         data: { roomId: null }
-  //       });
-  //     }
-  //
-  //     const roomState: RoomState = JSON.parse(roomData);
-  //     const roomDetails = {
-  //       playerCount: roomState.players.length,
-  //       isGameStarted: roomState.gameStarted || false,
-  //       roomState: {
-  //         id: roomState.id,
-  //         status: roomState.status,
-  //         maxPlayers: roomState.maxPlayers,
-  //         currentPlayerCount: roomState.currentPlayerCount
-  //       }
-  //     };
-  //
-  //     callback({
-  //       success: true,
-  //       data: {
-  //         roomId: currentRoomId,
-  //         roomDetails
-  //       }
-  //     });
-  //
-  //   } catch (error) {
-  //     console.error('Error getting user current room:', error);
-  //     callback({
-  //       success: false,
-  //       error: 'Failed to get current room status',
-  //       message: 'Internal server error'
-  //     });
-  //   }
-  // });
+  // 获取用户当前房间状态
+  socket.on('GET_USER_CURRENT_ROOM', async (data: any, callback: Function) => {
+    const { userId } = socket.data;
+
+    try {
+      const currentRoomId = await userStateService.getUserCurrentRoom(userId);
+      
+      if (!currentRoomId) {
+        return callback({
+          success: true,
+          data: { roomId: null }
+        });
+      }
+
+      // 获取房间详细信息
+      const roomData = await redisClient.get(`room:${currentRoomId}`);
+      if (!roomData) {
+        // 房间不存在，清理用户状态
+        await userStateService.clearUserCurrentRoom(userId);
+        return callback({
+          success: true,
+          data: { roomId: null }
+        });
+      }
+
+      const roomState: RoomState = JSON.parse(roomData);
+      const roomDetails = {
+        playerCount: roomState.players.length,
+        isGameStarted: roomState.gameStarted || false,
+        roomState: {
+          id: roomState.id,
+          status: roomState.status,
+          maxPlayers: roomState.maxPlayers,
+          currentPlayerCount: roomState.currentPlayerCount
+        }
+      };
+
+      callback({
+        success: true,
+        data: {
+          roomId: currentRoomId,
+          roomDetails
+        }
+      });
+
+    } catch (error) {
+      console.error('Error getting user current room:', error);
+      callback({
+        success: false,
+        error: 'Failed to get current room status',
+        message: 'Internal server error'
+      });
+    }
+  });
 
   // 断开连接时清理心跳
   socket.on(SOCKET_EVENTS.DISCONNECT, () => {
