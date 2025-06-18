@@ -50,7 +50,7 @@ router.get('/user-states', auth_1.authenticateToken, requireAdmin, (req, res) =>
         const keys = yield db_1.redisClient.keys('user_room:*');
         const userStates = [];
         for (const key of keys) {
-            const userId = key.replace('user_room:', '');
+            const userId = key.toString().replace('user_room:', '');
             const roomId = yield db_1.redisClient.get(key);
             if (roomId) {
                 // 验证房间是否存在
@@ -87,7 +87,7 @@ router.get('/user-states/:userId', auth_1.authenticateToken, requireAdmin, (req,
         if (currentRoom) {
             const roomData = yield db_1.redisClient.get(`room:${currentRoom}`);
             if (roomData) {
-                const roomState = JSON.parse(roomData);
+                const roomState = JSON.parse(roomData.toString());
                 const player = roomState.players.find((p) => p.id === userId);
                 roomDetails = {
                     roomState,
@@ -144,7 +144,7 @@ router.get('/room-consistency/:roomId', auth_1.authenticateToken, requireAdmin, 
         if (!roomData) {
             return res.status(404).json({ error: 'Room not found' });
         }
-        const roomState = JSON.parse(roomData);
+        const roomState = JSON.parse(roomData.toString());
         const issues = [];
         const players = roomState.players || [];
         // 检查每个玩家的全局状态
@@ -163,7 +163,7 @@ router.get('/room-consistency/:roomId', auth_1.authenticateToken, requireAdmin, 
         // 检查是否有用户引用了这个房间但不在玩家列表中
         const userRoomKeys = yield db_1.redisClient.keys('user_room:*');
         for (const key of userRoomKeys) {
-            const userId = key.replace('user_room:', '');
+            const userId = key.toString().replace('user_room:', '');
             const userRoomId = yield db_1.redisClient.get(key);
             if (userRoomId === roomId) {
                 const playerInRoom = players.find((p) => p.id === userId);

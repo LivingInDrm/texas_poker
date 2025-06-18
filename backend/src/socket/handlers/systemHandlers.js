@@ -13,6 +13,7 @@ exports.setupSystemHandlers = setupSystemHandlers;
 const socket_1 = require("../../types/socket");
 const validation_1 = require("../middleware/validation");
 const userStateService_1 = require("../../services/userStateService");
+const db_1 = require("../../db");
 function setupSystemHandlers(socket, io) {
     // 添加通用消息速率验证
     const originalEmit = socket.emit;
@@ -28,72 +29,122 @@ function setupSystemHandlers(socket, io) {
         const startTime = Date.now();
         callback(startTime);
     });
-    // 重连尝试处理
+    // 重连尝试处理 - 增强版
     socket.on(socket_1.SOCKET_EVENTS.RECONNECT_ATTEMPT, (data) => __awaiter(this, void 0, void 0, function* () {
         const { roomId } = data;
         const { userId, username } = socket.data;
         console.log(`Reconnect attempt from ${username} for room ${roomId || 'none'}`);
         try {
+            // 首先验证用户的全局状态
+            const userCurrentRoom = yield userStateService_1.userStateService.getUserCurrentRoom(userId);
+            console.log(`User ${username} global state: ${userCurrentRoom}`);
             if (roomId) {
-                // 检查用户是否仍在房间中
-                const { redisClient } = require('../../db');
-                const roomData = yield redisClient.get(`room:${roomId}`);
-                if (roomData) {
-                    const roomState = JSON.parse(roomData);
-                    const player = roomState.players.find((p) => p.id === userId);
-                    if (player) {
-                        // 重新加入房间
-                        yield socket.join(roomId);
-                        socket.data.roomId = roomId;
-                        // 更新全局用户状态
-                        yield userStateService_1.userStateService.setUserCurrentRoom(userId, roomId);
-                        // 标记为已连接
-                        player.isConnected = true;
-                        yield redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
-                        // 发送重连成功消息
-                        socket.emit(socket_1.SOCKET_EVENTS.RECONNECTED, {
-                            roomId,
-                            gameState: roomState.gameState
-                        });
-                        // 通知房间内其他玩家
-                        socket.to(roomId).emit(socket_1.SOCKET_EVENTS.ROOM_PLAYER_JOINED, {
-                            player: {
-                                id: player.id,
-                                username: player.username,
-                                avatar: player.avatar,
-                                chips: player.chips,
-                                isReady: player.isReady,
-                                position: player.position,
-                                isConnected: true,
-                                lastAction: player.lastAction
-                            }
-                        });
-                        // 发送房间状态更新
-                        socket.to(roomId).emit(socket_1.SOCKET_EVENTS.ROOM_STATE_UPDATE, {
-                            roomState
-                        });
-                        console.log(`User ${username} successfully reconnected to room ${roomId}`);
-                    }
-                    else {
-                        // 用户不在房间中
-                        socket.emit(socket_1.SOCKET_EVENTS.ERROR, {
-                            message: 'You are not a member of this room',
-                            code: 'ROOM_ACCESS_DENIED'
-                        });
-                    }
-                }
-                else {
-                    // 房间不存在
+                // 检查房间是否存在
+                const roomData = yield db_1.redisClient.get(`room:${roomId}`);
+                if (!roomData) {
+                    // 房间不存在，清理用户状态
+                    yield userStateService_1.userStateService.clearUserCurrentRoom(userId);
                     socket.emit(socket_1.SOCKET_EVENTS.ERROR, {
                         message: 'Room not found',
                         code: 'ROOM_NOT_FOUND'
                     });
+                    return;
+                }
+                const roomState = JSON.parse(roomData.toString());
+                const player = roomState.players.find((p) => p.id === userId);
+                // 验证用户全局状态与房间状态的一致性
+                if (userCurrentRoom !== roomId) {
+                    console.log(`State inconsistency detected for user ${username}: global=${userCurrentRoom}, requested=${roomId}`);
+                    if (userCurrentRoom) {
+                        // 用户在其他房间中，强制离开
+                        yield userStateService_1.userStateService.forceLeaveCurrentRoom(userId, socket, io, 'Reconnecting to different room');
+                    }
+                    // 如果用户不在请求的房间中，拒绝重连
+                    if (!player) {
+                        socket.emit(socket_1.SOCKET_EVENTS.ERROR, {
+                            message: 'You are not a member of this room',
+                            code: 'ROOM_ACCESS_DENIED'
+                        });
+                        return;
+                    }
+                }
+                if (player) {
+                    // 重新加入房间
+                    yield socket.join(roomId);
+                    socket.data.roomId = roomId;
+                    // 更新全局用户状态
+                    yield userStateService_1.userStateService.setUserCurrentRoom(userId, roomId);
+                    // 标记为已连接
+                    player.isConnected = true;
+                    yield db_1.redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
+                    // 发送重连成功消息，包含游戏状态
+                    socket.emit(socket_1.SOCKET_EVENTS.RECONNECTED, {
+                        roomId,
+                        gameState: roomState.gameState
+                    });
+                    // 发送当前房间状态
+                    socket.emit(socket_1.SOCKET_EVENTS.ROOM_STATE_UPDATE, {
+                        roomState
+                    });
+                    // 通知房间内其他玩家
+                    socket.to(roomId).emit(socket_1.SOCKET_EVENTS.ROOM_PLAYER_JOINED, {
+                        player: {
+                            id: player.id,
+                            username: player.username,
+                            avatar: player.avatar,
+                            chips: player.chips,
+                            isReady: player.isReady,
+                            position: player.position,
+                            isConnected: true,
+                            lastAction: player.lastAction
+                        }
+                    });
+                    console.log(`User ${username} successfully reconnected to room ${roomId}`);
+                }
+                else {
+                    // 用户不在房间中
+                    yield userStateService_1.userStateService.clearUserCurrentRoom(userId);
+                    socket.emit(socket_1.SOCKET_EVENTS.ERROR, {
+                        message: 'You are not a member of this room',
+                        code: 'ROOM_ACCESS_DENIED'
+                    });
                 }
             }
             else {
-                // 没有指定房间，发送通用重连确认
+                // 没有指定房间，检查用户是否有全局状态
+                if (userCurrentRoom) {
+                    // 用户有全局状态，尝试重连到该房间
+                    const roomData = yield db_1.redisClient.get(`room:${userCurrentRoom}`);
+                    if (roomData) {
+                        const roomState = JSON.parse(roomData.toString());
+                        const player = roomState.players.find((p) => p.id === userId);
+                        if (player) {
+                            // 重新加入房间
+                            yield socket.join(userCurrentRoom);
+                            socket.data.roomId = userCurrentRoom;
+                            // 标记为已连接
+                            player.isConnected = true;
+                            yield db_1.redisClient.setEx(`room:${userCurrentRoom}`, 3600, JSON.stringify(roomState));
+                            // 发送重连成功消息
+                            socket.emit(socket_1.SOCKET_EVENTS.RECONNECTED, {
+                                roomId: userCurrentRoom,
+                                gameState: roomState.gameState
+                            });
+                            console.log(`User ${username} reconnected to their current room ${userCurrentRoom}`);
+                        }
+                        else {
+                            // 状态不一致，清理
+                            yield userStateService_1.userStateService.clearUserCurrentRoom(userId);
+                        }
+                    }
+                    else {
+                        // 房间不存在，清理状态
+                        yield userStateService_1.userStateService.clearUserCurrentRoom(userId);
+                    }
+                }
+                // 发送通用重连确认
                 socket.emit(socket_1.SOCKET_EVENTS.RECONNECTED, {
-                    roomId: roomId
+                    roomId: userCurrentRoom || undefined
                 });
             }
         }
@@ -119,6 +170,55 @@ function setupSystemHandlers(socket, io) {
     //   const latency = Date.now() - timestamp;
     //   console.log(`Heartbeat from ${socket.data.username}: ${latency}ms`);
     // });
+    // 获取用户当前房间状态
+    socket.on('GET_USER_CURRENT_ROOM', (data, callback) => __awaiter(this, void 0, void 0, function* () {
+        const { userId } = socket.data;
+        try {
+            const currentRoomId = yield userStateService_1.userStateService.getUserCurrentRoom(userId);
+            if (!currentRoomId) {
+                return callback({
+                    success: true,
+                    data: { roomId: null }
+                });
+            }
+            // 获取房间详细信息
+            const roomData = yield db_1.redisClient.get(`room:${currentRoomId}`);
+            if (!roomData) {
+                // 房间不存在，清理用户状态
+                yield userStateService_1.userStateService.clearUserCurrentRoom(userId);
+                return callback({
+                    success: true,
+                    data: { roomId: null }
+                });
+            }
+            const roomState = JSON.parse(roomData);
+            const roomDetails = {
+                playerCount: roomState.players.length,
+                isGameStarted: roomState.gameStarted || false,
+                roomState: {
+                    id: roomState.id,
+                    status: roomState.status,
+                    maxPlayers: roomState.maxPlayers,
+                    currentPlayerCount: roomState.currentPlayerCount
+                }
+            };
+            callback({
+                success: true,
+                data: {
+                    roomId: currentRoomId,
+                    roomDetails
+                }
+            });
+        }
+        catch (error) {
+            console.error('Error getting user current room:', error);
+            callback({
+                success: false,
+                error: 'Failed to get current room status',
+                message: 'Internal server error'
+            });
+        }
+    }));
     // 断开连接时清理心跳
     socket.on(socket_1.SOCKET_EVENTS.DISCONNECT, () => {
         clearInterval(heartbeatInterval);

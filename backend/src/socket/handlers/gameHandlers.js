@@ -33,7 +33,7 @@ function setupGameHandlers(socket, io) {
                     message: socket_1.SOCKET_ERRORS.ROOM_NOT_FOUND
                 });
             }
-            const roomState = JSON.parse(roomData);
+            const roomState = JSON.parse(roomData.toString());
             // 查找玩家
             const playerIndex = roomState.players.findIndex(p => p.id === userId);
             if (playerIndex === -1) {
@@ -132,7 +132,7 @@ function setupGameHandlers(socket, io) {
                     message: socket_1.SOCKET_ERRORS.ROOM_NOT_FOUND
                 });
             }
-            const roomState = JSON.parse(roomData);
+            const roomState = JSON.parse(roomData.toString());
             if (!roomState.gameState) {
                 return callback({
                     success: false,
@@ -262,7 +262,7 @@ function setupGameHandlers(socket, io) {
                     message: socket_1.SOCKET_ERRORS.ROOM_NOT_FOUND
                 });
             }
-            const roomState = JSON.parse(roomData);
+            const roomState = JSON.parse(roomData.toString());
             // 检查是否是房主
             if (roomState.ownerId !== userId) {
                 return callback({

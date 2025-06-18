@@ -77,7 +77,7 @@ function setupRoomHandlers(socket, io) {
             let roomState;
             const existingRoomData = yield db_1.redisClient.get(`room:${roomId}`);
             if (existingRoomData) {
-                roomState = JSON.parse(existingRoomData);
+                roomState = JSON.parse(existingRoomData.toString());
             }
             else {
                 // 初始化房间状态
@@ -195,7 +195,7 @@ function setupRoomHandlers(socket, io) {
                     message: socket_1.SOCKET_ERRORS.ROOM_NOT_FOUND
                 });
             }
-            const roomState = JSON.parse(roomData);
+            const roomState = JSON.parse(roomData.toString());
             // 查找玩家
             const playerIndex = roomState.players.findIndex(p => p.id === userId);
             if (playerIndex === -1) {
@@ -294,7 +294,7 @@ function setupRoomHandlers(socket, io) {
             for (const room of availableRooms) {
                 const roomData = yield db_1.redisClient.get(`room:${room.id}`);
                 if (roomData) {
-                    const state = JSON.parse(roomData);
+                    const state = JSON.parse(roomData.toString());
                     if (state.players.length < state.maxPlayers) {
                         targetRoom = room;
                         roomState = state;
@@ -369,6 +369,14 @@ function setupRoomHandlers(socket, io) {
                 };
                 roomState.players.push(newPlayer);
                 roomState.currentPlayerCount = roomState.players.length;
+            }
+            // 验证targetRoom是否存在
+            if (!targetRoom) {
+                return callback({
+                    success: false,
+                    error: 'Failed to find or create room',
+                    message: 'Room creation failed'
+                });
             }
             // 加入socket房间
             yield socket.join(targetRoom.id);

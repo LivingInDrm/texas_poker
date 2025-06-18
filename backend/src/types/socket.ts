@@ -64,6 +64,7 @@ export interface RoomPlayer {
   position: number;
   isConnected: boolean;
   lastAction?: PlayerAction;
+  isOwner?: boolean;  // 添加房主标识
 }
 
 // 房间状态

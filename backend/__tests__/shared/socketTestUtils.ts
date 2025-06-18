@@ -14,10 +14,11 @@ export function createMockAuthenticatedSocket(
     ...userData
   };
 
-  return {
+  const mockSocket = {
     data: defaultData,
     id: 'mock-socket-id',
     connected: true,
+    recovered: false,
     handshake: {
       auth: {},
       headers: {},
@@ -30,12 +31,15 @@ export function createMockAuthenticatedSocket(
       issued: Date.now()
     },
     emit: jest.fn(),
+    emitWithAck: jest.fn(),
     on: jest.fn(),
     once: jest.fn(),
     off: jest.fn(),
     join: jest.fn(),
     leave: jest.fn(),
     to: jest.fn().mockReturnThis(),
+    in: jest.fn().mockReturnThis(),
+    except: jest.fn().mockReturnThis(),
     broadcast: jest.fn().mockReturnThis(),
     disconnect: jest.fn(),
     send: jest.fn(),
@@ -62,8 +66,22 @@ export function createMockAuthenticatedSocket(
     prependOnceListener: jest.fn(),
     setMaxListeners: jest.fn(),
     getMaxListeners: jest.fn(),
-    rawListeners: jest.fn()
-  } as jest.Mocked<AuthenticatedSocket>;
+    rawListeners: jest.fn(),
+    // 添加缺失的属性和方法
+    disconnected: false,
+    use: jest.fn(),
+    flags: {},
+    acks: new Map(),
+    fns: [],
+    // Mock外部注入的服务
+    prisma: {} as any,
+    redis: {} as any,
+    userStateService: {} as any,
+    validationMiddleware: {} as any,
+    io: {} as any
+  } as unknown as jest.Mocked<AuthenticatedSocket>;
+
+  return mockSocket;
 }
 
 /**
@@ -353,12 +371,12 @@ export class AsyncEventTestUtils {
       }, timeout);
 
       const originalEmit = socket.emit;
-      socket.emit.mockImplementation((event: string, ...args: any[]) => {
+      socket.emit.mockImplementation((event: any, ...args: any[]) => {
         if (event === eventName) {
           clearTimeout(timer);
           resolve(args);
         }
-        return originalEmit.call(socket, event, ...args);
+        return (originalEmit as any).call(socket, event, ...args);
       });
     });
   }

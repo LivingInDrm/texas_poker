@@ -3,107 +3,86 @@
  * 提供标准的测试数据集
  */
 
-import { Card } from '@/game/Card';
-import { Player } from '@/types/socket';
+import { Card, Suit, Rank } from '@/game/Card';
+import { RoomPlayer } from '@/types/socket';
 
 export const TEST_CARDS = {
   // 皇家同花顺
   ROYAL_FLUSH: [
-    new Card('hearts', 'A'),
-    new Card('hearts', 'K'),
-    new Card('hearts', 'Q'),
-    new Card('hearts', 'J'),
-    new Card('hearts', '10')
+    new Card(Suit.HEARTS, Rank.ACE),
+    new Card(Suit.HEARTS, Rank.KING),
+    new Card(Suit.HEARTS, Rank.QUEEN),
+    new Card(Suit.HEARTS, Rank.JACK),
+    new Card(Suit.HEARTS, Rank.TEN)
   ],
   
   // 同花顺
   STRAIGHT_FLUSH: [
-    new Card('spades', '9'),
-    new Card('spades', '8'),
-    new Card('spades', '7'),
-    new Card('spades', '6'),
-    new Card('spades', '5')
+    new Card(Suit.SPADES, Rank.NINE),
+    new Card(Suit.SPADES, Rank.EIGHT),
+    new Card(Suit.SPADES, Rank.SEVEN),
+    new Card(Suit.SPADES, Rank.SIX),
+    new Card(Suit.SPADES, Rank.FIVE)
   ],
 
   // 四条
   FOUR_OF_A_KIND: [
-    new Card('hearts', 'A'),
-    new Card('spades', 'A'),
-    new Card('clubs', 'A'),
-    new Card('diamonds', 'A'),
-    new Card('hearts', 'K')
+    new Card(Suit.HEARTS, Rank.ACE),
+    new Card(Suit.SPADES, Rank.ACE),
+    new Card(Suit.CLUBS, Rank.ACE),
+    new Card(Suit.DIAMONDS, Rank.ACE),
+    new Card(Suit.HEARTS, Rank.KING)
   ],
 
   // 葫芦
   FULL_HOUSE: [
-    new Card('hearts', 'K'),
-    new Card('spades', 'K'),
-    new Card('clubs', 'K'),
-    new Card('diamonds', 'Q'),
-    new Card('hearts', 'Q')
+    new Card(Suit.HEARTS, Rank.KING),
+    new Card(Suit.SPADES, Rank.KING),
+    new Card(Suit.CLUBS, Rank.KING),
+    new Card(Suit.DIAMONDS, Rank.QUEEN),
+    new Card(Suit.HEARTS, Rank.QUEEN)
   ],
 
   // 对子
   PAIR: [
-    new Card('hearts', 'A'),
-    new Card('spades', 'A'),
-    new Card('clubs', 'K'),
-    new Card('diamonds', 'Q'),
-    new Card('hearts', 'J')
+    new Card(Suit.HEARTS, Rank.ACE),
+    new Card(Suit.SPADES, Rank.ACE),
+    new Card(Suit.CLUBS, Rank.KING),
+    new Card(Suit.DIAMONDS, Rank.QUEEN),
+    new Card(Suit.HEARTS, Rank.JACK)
   ]
 };
 
 export const TEST_PLAYERS = {
   ALICE: {
     id: 'alice_123',
-    name: 'Alice',
+    username: 'Alice',
     chips: 1000,
-    currentBet: 0,
-    hasActed: false,
-    isAllIn: false,
-    hasFolded: false,
-    cards: [],
+    isReady: false,
     position: 0,
-    isDealer: false,
-    isSmallBlind: false,
-    isBigBlind: false,
-    timeoutId: null,
-    isActive: true
-  } as Player,
+    isConnected: true,
+    isOwner: true
+  } as RoomPlayer,
 
   BOB: {
     id: 'bob_456',
-    name: 'Bob',
+    username: 'Bob',
     chips: 1500,
-    currentBet: 0,
-    hasActed: false,
-    isAllIn: false,
-    hasFolded: false,
-    cards: [],
+    isReady: false,
     position: 1,
-    isDealer: false,
-    isSmallBlind: true,
-    isBigBlind: false,
-    timeoutId: null,
-    isActive: true
-  } as Player,
+    isConnected: true,
+    isOwner: false
+  } as RoomPlayer,
 
   CHARLIE: {
     id: 'charlie_789',
-    name: 'Charlie',
+    username: 'Charlie',
     chips: 2000,
-    currentBet: 0,
-    hasActed: false,
-    isAllIn: false,
-    hasFolded: false,
-    cards: [],
+    isReady: false,
     position: 2,
-    isDealer: false,
-    isSmallBlind: false,
-    isBigBlind: true,
-    timeoutId: null,
-    isActive: true
-  } as Player
+    isConnected: true,
+    isOwner: false
+  } as RoomPlayer
 };
 
 export const TEST_ROOM_CONFIG = {

@@ -140,7 +140,8 @@ export class MockFactory {
       forceLeaveCurrentRoom: jest.fn(),
       cleanupOrphanedUserStates: jest.fn(),
       isUserInRoom: jest.fn(),
-      getUsersInRoom: jest.fn()
+      getUsersInRoom: jest.fn(),
+      checkAndHandleRoomConflict: jest.fn()
     };
   }
 
@@ -154,6 +155,17 @@ export class MockFactory {
       validateMessageRate: jest.fn(),
       cleanup: jest.fn(),
       isRateLimited: jest.fn()
+    };
+  }
+
+  /**
+   * 创建bcrypt加密库Mock
+   */
+  static createBcryptMock() {
+    return {
+      compare: jest.fn(),
+      hash: jest.fn(),
+      genSalt: jest.fn()
     };
   }
 
@@ -193,6 +205,8 @@ export class MockFactory {
       socket: this.createSocketMock(),
       io: this.createIOMock(),
       userStateService: this.createUserStateServiceMock(),
+      validationMiddleware: this.createValidationMiddlewareMock(),
+      bcrypt: this.createBcryptMock(),
       callback: this.createCallbackMock()
     };
   }

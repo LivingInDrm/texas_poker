@@ -44,7 +44,7 @@ class ValidationMiddleware {
                     error: socket_1.SOCKET_ERRORS.ROOM_NOT_FOUND
                 };
             }
-            const roomState = JSON.parse(roomData);
+            const roomState = JSON.parse(roomData.toString());
             // 3. 验证玩家是否在房间中
             const player = roomState.players.find((p) => p.id === userId);
             if (!player) {
@@ -213,7 +213,7 @@ class ValidationMiddleware {
             const lastActionKey = `last_action:${userId}`;
             const lastActionTime = yield db_1.redisClient.get(lastActionKey);
             if (lastActionTime) {
-                const timeDiff = Date.now() - parseInt(lastActionTime);
+                const timeDiff = Date.now() - parseInt(lastActionTime.toString());
                 if (timeDiff < 500) { // 最少间隔500ms
                     return {
                         valid: false,

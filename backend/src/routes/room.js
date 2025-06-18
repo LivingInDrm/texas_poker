@@ -136,7 +136,7 @@ router.get('/list', (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             const roomStateStr = yield db_1.redisClient.get(`room:${room.id}`);
             let currentPlayers = 0;
             if (roomStateStr) {
-                const roomState = JSON.parse(roomStateStr);
+                const roomState = JSON.parse(roomStateStr.toString());
                 currentPlayers = roomState.currentPlayers || 0;
             }
             return {
@@ -216,7 +216,7 @@ router.post('/join', auth_1.authenticateToken, (req, res) => __awaiter(void 0, v
         let roomStateStr = yield db_1.redisClient.get(`room:${roomId}`);
         let roomState;
         if (roomStateStr) {
-            roomState = JSON.parse(roomStateStr);
+            roomState = JSON.parse(roomStateStr.toString());
         }
         else {
             // 如果 Redis 中没有，从数据库重建

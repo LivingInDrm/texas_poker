@@ -31,7 +31,7 @@ class UserStateService {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const roomId = yield db_1.redisClient.get(`user_room:${userId}`);
-                return roomId;
+                return roomId ? roomId.toString() : null;
             }
             catch (error) {
                 console.error('Error getting user current room:', error);
@@ -86,7 +86,7 @@ class UserStateService {
                     yield this.clearUserCurrentRoom(userId);
                     return { success: true, previousRoomId: currentRoomId };
                 }
-                const roomState = JSON.parse(roomData);
+                const roomState = JSON.parse(roomData.toString());
                 // 查找用户在房间中的位置
                 const playerIndex = roomState.players.findIndex(p => p.id === userId);
                 if (playerIndex === -1) {
@@ -212,7 +212,7 @@ class UserStateService {
                     fixedIssues.push(`Cleared invalid room reference for user ${userId}`);
                     return { consistent: false, issues, fixedIssues };
                 }
-                const roomState = JSON.parse(roomData);
+                const roomState = JSON.parse(roomData.toString());
                 const playerInRoom = roomState.players.find(p => p.id === userId);
                 if (!playerInRoom) {
                     issues.push(`User ${userId} not found in room ${userRoomId} player list`);
@@ -239,7 +239,7 @@ class UserStateService {
                 if (!roomData) {
                     return [];
                 }
-                const roomState = JSON.parse(roomData);
+                const roomState = JSON.parse(roomData.toString());
                 return roomState.players
                     .filter(p => p.isConnected)
                     .map(p => p.id);
