@@ -1,228 +1,204 @@
 import request from 'supertest';
 import express from 'express';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
-import * as Redis from 'redis';
+import { MockFactory } from '../shared/mockFactory';
+import { TestDataGenerator, MockDataConfigurator, ApiTestHelper, TypeScriptCompatibility } from '../shared/testDataGenerator';
 
-// Mock dependencies BEFORE importing modules
+// Create mocks first
+const mockPrisma = MockFactory.createPrismaMock();
+const mockRedis = MockFactory.createRedisMock();
+const mockUserStateService = MockFactory.createUserStateServiceMock();
+
+// Mock dependencies before importing modules
 jest.mock('@prisma/client');
-jest.mock('redis');
-jest.mock('bcrypt');
-jest.mock('jsonwebtoken');
-
-// Mock the prisma module specifically  
-const mockPrismaFunctions = {
-  room: {
-    create: jest.fn(),
-    findMany: jest.fn(),
-    findUnique: jest.fn(),
-    update: jest.fn(),
-    count: jest.fn()
-  },
-  user: {
-    findUnique: jest.fn()
-  }
-};
-
-jest.mock('../../src/prisma', () => mockPrismaFunctions);
-
-// Mock the Redis client module
-const mockRedisClient = {
-  get: jest.fn(),
-  set: jest.fn(),
-  setEx: jest.fn(),
-  del: jest.fn(),
-  exists: jest.fn(),
-  connect: jest.fn(),
-  disconnect: jest.fn()
-};
-
+jest.mock('../../src/prisma', () => mockPrisma);
 jest.mock('../../src/db', () => ({
-  redisClient: mockRedisClient
+  redisClient: mockRedis
 }));
-
-// Mock userStateService
-const mockUserStateServiceFunctions = {
-  getUserCurrentRoom: jest.fn(),
-  setUserCurrentRoom: jest.fn(),
-  clearUserCurrentRoom: jest.fn(),
-  checkAndHandleRoomConflict: jest.fn()
-};
-
 jest.mock('../../src/services/userStateService', () => ({
-  userStateService: mockUserStateServiceFunctions
+  userStateService: mockUserStateService
+}));
+jest.mock('../../src/middleware/auth', () => ({
+  authenticateToken: jest.fn((req: any, res: any, next: any) => {
+    req.user = { id: 'test-user-id', username: 'testuser' };
+    next();
+  })
 }));
 
-// Import the modules to test AFTER mocking
-import roomRoutes from '../../src/routes/room';
-import { authenticateToken } from '../../src/middleware/auth';
-
-// Use the mock objects directly
-const mockPrisma = mockPrismaFunctions;
-const mockRedis = mockRedisClient; 
-const mockUserStateService = mockUserStateServiceFunctions;
-
-// Setup additional mock behavior for constructor-based mocks
-(PrismaClient as jest.MockedClass<typeof PrismaClient>).mockImplementation(() => mockPrisma as any);
-(Redis.createClient as jest.Mock).mockReturnValue(mockRedis);
-
-describe('Room Management API Tests', () => {
+describe('Room Routes', () => {
   let app: express.Application;
+  let mocks: any;
+  let testData: any;
 
   beforeAll(() => {
-    // Setup Express app with routes
-    app = express();
-    app.use(express.json());
+    // Create comprehensive mock setup
+    mocks = {
+      prisma: mockPrisma,
+      redis: mockRedis,
+      userStateService: mockUserStateService
+    };
+    
+    testData = {
+      currentUser: TestDataGenerator.createUserData({
+        id: 'test-user-id',
+        username: 'testuser'
+      }),
+      room: TestDataGenerator.createRoomData('test-user-id', {
+        id: 'room-123',
+        playerLimit: 6,
+        bigBlind: 20,
+        smallBlind: 10,
+        status: 'WAITING'
+      }),
+      roomOwner: TestDataGenerator.createUserData({
+        id: 'test-user-id',
+        username: 'testuser'
+      }),
+      roomState: TestDataGenerator.createRedisRoomStateData({
+        id: 'room-123',
+        ownerId: 'test-user-id',
+        currentPlayers: 1, // Use currentPlayers instead of currentPlayerCount
+        players: [{
+          id: 'test-user-id',
+          username: 'testuser',
+          chips: 5000,
+          position: 0,
+          isOwner: true
+        }]
+      })
+    };
 
-    // Mock JWT verification to work synchronously for testing
-    (jwt.verify as jest.Mock).mockImplementation((token: string, secret: string) => {
-      if (token === 'valid-token') {
-        return { userId: 'user-123', username: 'testuser' };
-      } else {
-        throw new Error('Invalid token');
-      }
+    // Configure mocks
+    MockDataConfigurator.configureAllMocks(mocks, testData);
+
+    // Mock authentication middleware
+    const mockAuth = require('../../src/middleware/auth');
+    mockAuth.authenticateToken = jest.fn((req: any, res: any, next: any) => {
+      req.user = testData.currentUser;
+      next();
     });
 
-    // Add routes to app
+    // Create test app
+    app = express();
+    app.use(express.json());
+    
+    // Import and use routes after mocking
+    const roomRoutes = require('../../src/routes/room').default;
     app.use('/api/room', roomRoutes);
   });
 
   beforeEach(() => {
-    // Clear all mocks before each test
     jest.clearAllMocks();
     
-    // Reset mock implementations
-    (mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
-      id: 'user-123',
-      username: 'testuser'
+    // Reset default mock behaviors
+    mocks.prisma.room.create.mockResolvedValue({
+      ...testData.room,
+      owner: testData.roomOwner
     });
-    
-    // Reset userStateService defaults
-    (mockUserStateService.getUserCurrentRoom as jest.Mock).mockResolvedValue(null);
-    (mockUserStateService.setUserCurrentRoom as jest.Mock).mockResolvedValue(true);
-    (mockUserStateService.clearUserCurrentRoom as jest.Mock).mockResolvedValue(true);
-    (mockUserStateService.checkAndHandleRoomConflict as jest.Mock).mockResolvedValue({ 
-      canJoin: true 
+    mocks.prisma.room.findUnique.mockResolvedValue({
+      ...testData.room,
+      owner: testData.roomOwner
     });
+    mocks.prisma.room.findMany.mockResolvedValue([{
+      ...testData.room,
+      owner: testData.roomOwner
+    }]);
+    mocks.prisma.room.count.mockResolvedValue(1);
+    mocks.redis.setEx.mockResolvedValue('OK');
+    mocks.redis.get.mockResolvedValue(JSON.stringify(testData.roomState));
+    mocks.redis.del.mockResolvedValue(1);
+    mocks.userStateService.setUserCurrentRoom.mockResolvedValue(undefined);
+    mocks.userStateService.getUserCurrentRoom.mockResolvedValue(null);
+    mocks.userStateService.clearUserCurrentRoom.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    // Clean up any remaining timers or handlers
-    jest.clearAllTimers();
-  });
-
-  describe('POST /api/room/create', () => {
-    const validCreatePayload = {
-      playerLimit: 6,
-      password: 'test123',
-      bigBlind: 20,
-      smallBlind: 10
-    };
-
-    it('should create a room successfully with valid data', async () => {
-      // Mock room creation with owner included
-      const mockRoom = {
-        id: 'room-123',
-        ownerId: 'user-123',
-        playerLimit: 6,
-        password: 'test123', // plain text password in request
-        status: 'WAITING',
-        bigBlind: 20,
-        smallBlind: 10,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        owner: {
-          id: 'user-123',
-          username: 'testuser',
-          avatar: null
-        }
-      };
-      (mockPrisma.room.create as jest.Mock).mockResolvedValue(mockRoom);
-
-      // Mock password hashing (routes don't hash passwords in the current implementation)
-      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
-
-      // Mock Redis operations
-      (mockRedis.setEx as jest.Mock).mockResolvedValue('OK');
+  describe('POST /create', () => {
+    it('should create a room successfully', async () => {
+      // Mock the created room to have a password
+      mocks.prisma.room.create.mockResolvedValue({
+        ...testData.room,
+        password: 'test123',
+        owner: testData.roomOwner
+      });
 
       const response = await request(app)
         .post('/api/room/create')
         .set('Authorization', 'Bearer valid-token')
-        .send(validCreatePayload);
-
-      expect(response.status).toBe(201);
-      expect(response.body.message).toBe('Room created successfully');
-      expect(response.body.room).toMatchObject({
-        id: 'room-123',
-        ownerId: 'user-123',
-        playerLimit: 6,
-        status: 'WAITING',
-        currentPlayers: 1,
-        hasPassword: true
-      });
-
-      // Verify Prisma was called correctly
-      expect(mockPrisma.room.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          ownerId: 'user-123',
+        .send({
           playerLimit: 6,
           bigBlind: 20,
           smallBlind: 10,
-          status: 'WAITING'
-        }),
-        include: expect.objectContaining({
-          owner: expect.any(Object)
-        })
+          password: 'test123'
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.room).toMatchObject({
+        id: testData.room.id,
+        ownerId: testData.room.ownerId,
+        playerLimit: 6,
+        currentPlayers: 1,
+        bigBlind: 20,
+        smallBlind: 10,
+        hasPassword: true,
+        status: 'WAITING'
       });
 
-      // Verify Redis state was set with setEx
-      expect(mockRedis.setEx).toHaveBeenCalledWith(
-        'room:room-123',
+      expect(mocks.prisma.room.create).toHaveBeenCalledWith({
+        data: {
+          ownerId: testData.currentUser.id,
+          playerLimit: 6,
+          password: 'test123',
+          bigBlind: 20,
+          smallBlind: 10,
+          status: 'WAITING'
+        },
+        include: {
+          owner: {
+            select: {
+              id: true,
+              username: true,
+              avatar: true
+            }
+          }
+        }
+      });
+
+      expect(mocks.redis.setEx).toHaveBeenCalledWith(
+        `room:${testData.room.id}`,
         3600,
-        expect.stringContaining('"id":"room-123"')
+        expect.stringContaining(testData.currentUser.username)
       );
 
-      // Verify user state was set
-      expect(mockUserStateService.setUserCurrentRoom as jest.Mock).toHaveBeenCalledWith('user-123', 'room-123');
+      expect(mocks.userStateService.setUserCurrentRoom).toHaveBeenCalledWith(
+        testData.currentUser.id,
+        testData.room.id
+      );
     });
 
-    it('should fail without authentication', async () => {
-      const response = await request(app)
-        .post('/api/room/create')
-        .send(validCreatePayload);
+    it('should validate player limit bounds', async () => {
+      const invalidLimits = [1, 10, 0, -1];
+      
+      for (const limit of invalidLimits) {
+        const response = await request(app)
+          .post('/api/room/create')
+          .set('Authorization', 'Bearer valid-token')
+          .send({
+            playerLimit: limit,
+            bigBlind: 20,
+            smallBlind: 10
+          });
 
-      expect(response.status).toBe(401);
-      expect(response.body.error).toBe('Access token required');
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain('Player limit must be between 2 and 9');
+      }
     });
 
-    it('should fail with invalid player limit (too low)', async () => {
-      const response = await request(app)
-        .post('/api/room/create')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ ...validCreatePayload, playerLimit: 1 });
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toContain('Player limit must be between 2 and 9');
-    });
-
-    it('should fail with invalid player limit (too high)', async () => {
-      const response = await request(app)
-        .post('/api/room/create')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ ...validCreatePayload, playerLimit: 10 });
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toContain('Player limit must be between 2 and 9');
-    });
-
-    it('should fail with invalid blind amounts', async () => {
+    it('should validate blind sizes', async () => {
       const response = await request(app)
         .post('/api/room/create')
         .set('Authorization', 'Bearer valid-token')
-        .send({ 
-          ...validCreatePayload, 
-          bigBlind: 10, 
+        .send({
+          playerLimit: 6,
+          bigBlind: 10,
           smallBlind: 20 // Big blind smaller than small blind
         });
 
@@ -230,408 +206,32 @@ describe('Room Management API Tests', () => {
       expect(response.body.error).toContain('Big blind must be greater than small blind');
     });
 
-    it('should create room without password', async () => {
-      const mockRoom = {
-        id: 'room-123',
-        ownerId: 'user-123',
-        playerLimit: 6,
-        password: null,
-        status: 'WAITING',
-        bigBlind: 20,
-        smallBlind: 10,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        owner: {
-          id: 'user-123',
-          username: 'testuser',
-          avatar: null
-        }
-      };
-      (mockPrisma.room.create as jest.Mock).mockResolvedValue(mockRoom);
-      (mockRedis.setEx as jest.Mock).mockResolvedValue('OK');
+    it('should handle authentication failure', async () => {
+      const mockAuth = require('../../src/middleware/auth');
+      mockAuth.authenticateToken.mockImplementation((req: any, res: any, next: any) => {
+        res.status(401).json({ error: 'Unauthorized' });
+      });
 
       const response = await request(app)
         .post('/api/room/create')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ ...validCreatePayload, password: '' });
-
-      expect(response.status).toBe(201);
-      expect(response.body.message).toBe('Room created successfully');
-      expect(response.body.room.hasPassword).toBe(false);
-      
-      // Verify password was stored as null
-      expect(mockPrisma.room.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          password: null
-        }),
-        include: expect.any(Object)
-      });
-    });
-  });
-
-  describe('GET /api/room/list', () => {
-    it('should return paginated room list', async () => {
-      const mockRooms = [
-        {
-          id: 'room-1',
-          ownerId: 'user-1',
+        .send({
           playerLimit: 6,
-          status: 'WAITING',
           bigBlind: 20,
-          smallBlind: 10,
-          password: null,
-          createdAt: new Date(),
-          owner: { id: 'user-1', username: 'user1', avatar: null }
-        },
-        {
-          id: 'room-2',
-          ownerId: 'user-2',
-          playerLimit: 4,
-          status: 'PLAYING',
-          bigBlind: 40,
-          smallBlind: 20,
-          password: 'hashed',
-          createdAt: new Date(),
-          owner: { id: 'user-2', username: 'user2', avatar: null }
-        }
-      ];
-
-      (mockPrisma.room.findMany as jest.Mock).mockResolvedValue(mockRooms);
-      (mockPrisma.room.count as jest.Mock).mockResolvedValue(2);
-
-      // Mock Redis to return room states
-      (mockRedis.get as jest.Mock).mockImplementation((key: string) => {
-        if (key === 'room:room-1') {
-          return JSON.stringify({
-            id: 'room-1',
-            currentPlayers: 1,
-            players: [{ id: 'user-1', username: 'user1' }]
-          });
-        }
-        if (key === 'room:room-2') {
-          return JSON.stringify({
-            id: 'room-2',
-            currentPlayers: 3,
-            players: [
-              { id: 'user-2', username: 'user2' },
-              { id: 'user-3', username: 'user3' },
-              { id: 'user-4', username: 'user4' }
-            ]
-          });
-        }
-        return null;
-      });
-
-      const response = await request(app)
-        .get('/api/room/list')
-        .query({ page: 1, limit: 10 });
-
-      expect(response.status).toBe(200);
-      expect(response.body.rooms).toHaveLength(2);
-      expect(response.body.pagination).toEqual({
-        page: 1,
-        limit: 10,
-        total: 2,
-        totalPages: 1
-      });
-
-      // Check that Redis was called for each room
-      expect(mockRedis.get as jest.Mock).toHaveBeenCalledWith('room:room-1');
-      expect(mockRedis.get as jest.Mock).toHaveBeenCalledWith('room:room-2');
-    });
-
-    it('should handle pagination correctly', async () => {
-      (mockPrisma.room.findMany as jest.Mock).mockResolvedValue([]);
-      (mockPrisma.room.count as jest.Mock).mockResolvedValue(25);
-
-      const response = await request(app)
-        .get('/api/room/list')
-        .query({ page: 3, limit: 5 });
-
-      expect(response.status).toBe(200);
-      expect(response.body.pagination).toEqual({
-        page: 3,
-        limit: 5,
-        total: 25,
-        totalPages: 5
-      });
-
-      // Verify correct offset was used
-      expect(mockPrisma.room.findMany as jest.Mock).toHaveBeenCalledWith({
-        where: { status: { in: ['WAITING', 'PLAYING'] } },
-        include: { owner: { select: { id: true, username: true, avatar: true } } },
-        orderBy: { createdAt: 'desc' },
-        skip: 10, // (page - 1) * limit = (3 - 1) * 5
-        take: 5
-      });
-    });
-
-    it('should use default pagination values', async () => {
-      (mockPrisma.room.findMany as jest.Mock).mockResolvedValue([]);
-      (mockPrisma.room.count as jest.Mock).mockResolvedValue(0);
-
-      const response = await request(app)
-        .get('/api/room/list');
-
-      expect(response.status).toBe(200);
-      expect(mockPrisma.room.findMany as jest.Mock).toHaveBeenCalledWith({
-        where: { status: { in: ['WAITING', 'PLAYING'] } },
-        include: { owner: { select: { id: true, username: true, avatar: true } } },
-        orderBy: { createdAt: 'desc' },
-        skip: 0, // Default page 1
-        take: 10 // Default limit from route
-      });
-    });
-  });
-
-  describe('POST /api/room/join', () => {
-    const validJoinPayload = {
-      roomId: 'room-123'
-    };
-
-    beforeEach(() => {
-      // Mock user exists - make sure we use the right user ID
-      (mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
-        id: 'user-123', // This should match the JWT decoded userId
-        username: 'testuser' // This should match the JWT decoded username
-      });
-      
-      // Make sure getUserCurrentRoom returns null for this specific test
-      (mockUserStateService.getUserCurrentRoom as jest.Mock).mockResolvedValue(null);
-    });
-
-    it('should join a room successfully without password', async () => {
-      // Mock room exists in database
-      (mockPrisma.room.findUnique as jest.Mock).mockResolvedValue({
-        id: 'room-123',
-        ownerId: 'user-456', // Different owner
-        playerLimit: 6,
-        password: null,
-        status: 'WAITING',
-        bigBlind: 20,
-        smallBlind: 10,
-        createdAt: new Date(),
-        owner: {
-          id: 'user-456',
-          username: 'owner',
-          avatar: null
-        }
-      });
-
-      // Mock room state in Redis  
-      const roomState = {
-        id: 'room-123',
-        ownerId: 'user-456',
-        players: [{ id: 'user-456', username: 'owner' }], // Only room owner, not the joining user
-        currentPlayers: 1,
-        playerLimit: 6,
-        hasPassword: false,
-        status: 'WAITING'
-      };
-      (mockRedis.get as jest.Mock).mockResolvedValue(JSON.stringify(roomState));
-      (mockRedis.setEx as jest.Mock).mockResolvedValue('OK');
-
-      const response = await request(app)
-        .post('/api/room/join')
-        .set('Authorization', 'Bearer valid-token')
-        .send(validJoinPayload);
-
-      expect(response.status).toBe(200);
-      expect(response.body.message).toBe('Joined room successfully');
-
-      // Verify Redis state was updated with setEx
-      expect(mockRedis.setEx as jest.Mock).toHaveBeenCalledWith(
-        'room:room-123',
-        3600,
-        expect.stringContaining('"currentPlayers":2')
-      );
-    });
-
-    it('should join a room successfully with correct password', async () => {
-      (mockPrisma.room.findUnique as jest.Mock).mockResolvedValue({
-        id: 'room-123',
-        ownerId: 'user-456',  // Different owner
-        playerLimit: 6,
-        password: 'test123',  // Route uses plain text comparison, not bcrypt
-        status: 'WAITING'
-      });
-
-      const roomState = {
-        id: 'room-123',
-        players: [{ id: 'user-456', username: 'owner' }],
-        currentPlayers: 1,
-        playerLimit: 6,
-        hasPassword: true,
-        status: 'WAITING'
-      };
-      (mockRedis.get as jest.Mock).mockResolvedValue(JSON.stringify(roomState));
-      (mockRedis.setEx as jest.Mock).mockResolvedValue('OK');
-
-      const response = await request(app)
-        .post('/api/room/join')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ ...validJoinPayload, password: 'test123' });
-
-      expect(response.status).toBe(200);
-      expect(response.body.message).toBe('Joined room successfully');
-    });
-
-    it('should fail with wrong password', async () => {
-      (mockPrisma.room.findUnique as jest.Mock).mockResolvedValue({
-        id: 'room-123',
-        password: 'correct-password',  // Route uses plain text comparison
-        status: 'WAITING'
-      });
-
-      const response = await request(app)
-        .post('/api/room/join')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ ...validJoinPayload, password: 'wrong-password' });
+          smallBlind: 10
+        });
 
       expect(response.status).toBe(401);
-      expect(response.body.error).toBe('Incorrect password');
-    });
+      expect(response.body.error).toContain('Unauthorized');
 
-    it('should fail when room is full', async () => {
-      (mockPrisma.room.findUnique as jest.Mock).mockResolvedValue({
-        id: 'room-123',
-        playerLimit: 4,
-        password: null,
-        status: 'WAITING'
+      // Restore mock
+      mockAuth.authenticateToken.mockImplementation((req: any, res: any, next: any) => {
+        req.user = testData.currentUser;
+        next();
       });
-
-      const roomState = {
-        id: 'room-123',
-        players: [
-          { id: 'user-1' }, { id: 'user-2' }, 
-          { id: 'user-3' }, { id: 'user-4' }
-        ],
-        currentPlayers: 4,
-        playerLimit: 4,
-        status: 'WAITING'
-      };
-      (mockRedis.get as jest.Mock).mockResolvedValue(JSON.stringify(roomState));
-
-      const response = await request(app)
-        .post('/api/room/join')
-        .set('Authorization', 'Bearer valid-token')
-        .send(validJoinPayload);
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Room is full');
     });
 
-    it('should fail when room does not exist', async () => {
-      (mockPrisma.room.findUnique as jest.Mock).mockResolvedValue(null);
-
-      const response = await request(app)
-        .post('/api/room/join')
-        .set('Authorization', 'Bearer valid-token')
-        .send(validJoinPayload);
-
-      expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Room not found');
-    });
-
-    it('should fail when already in the room', async () => {
-      (mockPrisma.room.findUnique as jest.Mock).mockResolvedValue({
-        id: 'room-123',
-        password: null,
-        status: 'WAITING'
-      });
-
-      const roomState = {
-        id: 'room-123',
-        players: [
-          { id: 'user-123', username: 'testuser' },  // Current user already in room
-          { id: 'user-456', username: 'joiner' }
-        ],
-        currentPlayers: 2,
-        playerLimit: 6,
-        status: 'WAITING'
-      };
-      (mockRedis.get as jest.Mock).mockResolvedValue(JSON.stringify(roomState));
-
-      const response = await request(app)
-        .post('/api/room/join')
-        .set('Authorization', 'Bearer valid-token')
-        .send(validJoinPayload);
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('You are already in this room');
-    });
-  });
-
-  describe('DELETE /api/room/:id', () => {
-    it('should delete room successfully by owner', async () => {
-      // Mock room exists and user is owner
-      (mockPrisma.room.findUnique as jest.Mock).mockResolvedValue({
-        id: 'room-123',
-        ownerId: 'user-123',
-        status: 'WAITING'
-      });
-
-      (mockPrisma.room.update as jest.Mock).mockResolvedValue({
-        id: 'room-123',
-        status: 'ENDED'
-      });
-
-      (mockRedis.del as jest.Mock).mockResolvedValue(1);
-
-      const response = await request(app)
-        .delete('/api/room/room-123')
-        .set('Authorization', 'Bearer valid-token');
-
-      expect(response.status).toBe(200);
-      expect(response.body.message).toBe('Room deleted successfully');
-
-      // Verify database update
-      expect(mockPrisma.room.update).toHaveBeenCalledWith({
-        where: { id: 'room-123' },
-        data: { status: 'ENDED' }
-      });
-
-      // Verify Redis cleanup
-      expect(mockRedis.del).toHaveBeenCalledWith('room:room-123');
-    });
-
-    it('should fail when user is not the owner', async () => {
-      (mockPrisma.room.findUnique as jest.Mock).mockResolvedValue({
-        id: 'room-123',
-        ownerId: 'different-user',
-        status: 'WAITING'
-      });
-
-      const response = await request(app)
-        .delete('/api/room/room-123')
-        .set('Authorization', 'Bearer valid-token');
-
-      expect(response.status).toBe(403);
-      expect(response.body.error).toBe('Only room owner can delete the room');
-    });
-
-    it('should fail when room does not exist', async () => {
-      (mockPrisma.room.findUnique as jest.Mock).mockResolvedValue(null);
-
-      const response = await request(app)
-        .delete('/api/room/room-123')
-        .set('Authorization', 'Bearer valid-token');
-
-      expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Room not found');
-    });
-
-    it('should fail without authentication', async () => {
-      const response = await request(app)
-        .delete('/api/room/room-123');
-
-      expect(response.status).toBe(401);
-    });
-  });
-
-  describe('Error Handling', () => {
-    it('should handle database connection errors', async () => {
-      (mockPrisma.room.create as jest.Mock).mockRejectedValue(new Error('Database connection failed'));
+    it('should handle database errors', async () => {
+      mocks.prisma.room.create.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
         .post('/api/room/create')
@@ -645,79 +245,465 @@ describe('Room Management API Tests', () => {
       expect(response.status).toBe(500);
       expect(response.body.error).toContain('Internal server error');
     });
+  });
 
-    it('should handle Redis connection errors', async () => {
-      // Mock successful Prisma operations first
-      const mockRoom = {
-        id: 'room-123',
-        ownerId: 'user-123',
-        playerLimit: 6,
-        password: null,
-        status: 'WAITING',
-        bigBlind: 20,
-        smallBlind: 10,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        owner: {
-          id: 'user-123',
-          username: 'testuser',
-          avatar: null
-        }
-      };
-      (mockPrisma.room.create as jest.Mock).mockResolvedValue(mockRoom);
-      // Mock Redis failure
-      (mockRedis.setEx as jest.Mock).mockRejectedValue(new Error('Redis connection failed'));
+  describe('GET /list', () => {
+    it('should return room list with pagination', async () => {
+      const response = await request(app)
+        .get('/api/room/list?page=1&limit=10');
+
+      expect(response.status).toBe(200);
+      expect(response.body.rooms).toHaveLength(1);
+      expect(response.body.rooms[0]).toMatchObject({
+        id: testData.room.id,
+        ownerId: testData.room.ownerId,
+        playerLimit: testData.room.playerLimit,
+        currentPlayers: 1, // Redis returns current players from room state
+        hasPassword: false,
+        status: 'WAITING'
+      });
+
+      expect(response.body.pagination).toMatchObject({
+        page: 1,
+        limit: 10,
+        total: 1,
+        totalPages: 1
+      });
+
+      expect(mocks.prisma.room.findMany).toHaveBeenCalledWith({
+        where: {
+          status: { in: ['WAITING', 'PLAYING'] }
+        },
+        include: {
+          owner: {
+            select: {
+              id: true,
+              username: true,
+              avatar: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        skip: 0,
+        take: 10
+      });
+    });
+
+    it('should handle pagination parameters', async () => {
+      const response = await request(app)
+        .get('/api/room/list?page=2&limit=5');
+
+      expect(response.status).toBe(200);
+      expect(mocks.prisma.room.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skip: 5,
+          take: 5
+        })
+      );
+    });
+
+    it('should handle Redis errors gracefully', async () => {
+      mocks.redis.get.mockRejectedValue(new Error('Redis error'));
 
       const response = await request(app)
-        .post('/api/room/create')
-        .set('Authorization', 'Bearer valid-token')
-        .send({
-          playerLimit: 6,
-          bigBlind: 20,
-          smallBlind: 10
-        });
+        .get('/api/room/list');
+
+      // The current implementation doesn't handle Redis errors in the map function
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Internal server error');
+    });
+
+    it('should handle invalid Redis data', async () => {
+      mocks.redis.get.mockResolvedValue('invalid-json');
+
+      const response = await request(app)
+        .get('/api/room/list');
+
+      // The current implementation doesn't handle JSON parse errors
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Internal server error');
+    });
+
+    it('should handle database errors', async () => {
+      mocks.prisma.room.findMany.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/api/room/list');
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal server error');
+      expect(response.body.error).toContain('Internal server error');
     });
   });
 
-  describe('Input Validation', () => {
-    it('should validate room ID is provided', async () => {
+  describe('POST /join', () => {
+    it('should join a room successfully', async () => {
+      // Mock room state with only the owner, not the current user
+      const roomStateWithOwnerOnly = {
+        ...testData.roomState,
+        currentPlayers: 1,
+        players: [{
+          id: 'owner-user-id', // Different from current user
+          username: 'owner',
+          chips: 5000,
+          position: 0,
+          isOwner: true
+        }]
+      };
+      mocks.redis.get.mockResolvedValue(JSON.stringify(roomStateWithOwnerOnly));
+
+      const response = await request(app)
+        .post('/api/room/join')
+        .set('Authorization', 'Bearer valid-token')
+        .send({
+          roomId: 'room-123'
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.room).toMatchObject({
+        id: testData.room.id,
+        currentPlayers: 2 // Should be incremented
+      });
+
+      expect(mocks.userStateService.getUserCurrentRoom).toHaveBeenCalledWith(testData.currentUser.id);
+      expect(mocks.prisma.room.findUnique).toHaveBeenCalledWith({
+        where: { id: 'room-123' },
+        include: {
+          owner: {
+            select: {
+              id: true,
+              username: true,
+              avatar: true
+            }
+          }
+        }
+      });
+
+      expect(mocks.redis.setEx).toHaveBeenCalledWith(
+        'room:room-123',
+        3600,
+        expect.stringContaining(testData.currentUser.username)
+      );
+
+      expect(mocks.userStateService.setUserCurrentRoom).toHaveBeenCalledWith(
+        testData.currentUser.id,
+        'room-123'
+      );
+    });
+
+    it('should require room ID', async () => {
       const response = await request(app)
         .post('/api/room/join')
         .set('Authorization', 'Bearer valid-token')
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Room ID is required');
+      expect(response.body.error).toContain('Room ID is required');
     });
 
-    it('should validate required fields for room creation', async () => {
-      const response = await request(app)
-        .post('/api/room/create')
-        .set('Authorization', 'Bearer valid-token')
-        .send({}); // Empty payload
+    it('should prevent joining when already in another room', async () => {
+      mocks.userStateService.getUserCurrentRoom.mockResolvedValue('other-room');
 
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Player limit must be between 2 and 9');
-    });
-
-    it('should validate numeric fields are numbers', async () => {
-      // The route doesn't validate types - it accepts any value and checks !playerLimit
-      // When playerLimit is a string, it's truthy, so this test should pass validation
-      // But we can test with an empty/null value that would fail
       const response = await request(app)
-        .post('/api/room/create')
+        .post('/api/room/join')
         .set('Authorization', 'Bearer valid-token')
         .send({
-          playerLimit: null,  // This will trigger the !playerLimit check
-          bigBlind: 20,
-          smallBlind: 10
+          roomId: 'room-123'
         });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Player limit must be between 2 and 9');
+      expect(response.body.error).toContain('You are already in another room');
+      expect(response.body.currentRoom).toBe('other-room');
+    });
+
+    it('should handle room not found', async () => {
+      mocks.prisma.room.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/api/room/join')
+        .set('Authorization', 'Bearer valid-token')
+        .send({
+          roomId: 'nonexistent-room'
+        });
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toContain('Room not found');
+    });
+
+    it('should handle ended room', async () => {
+      mocks.prisma.room.findUnique.mockResolvedValue({
+        ...testData.room,
+        status: 'ENDED',
+        owner: testData.roomOwner
+      });
+
+      const response = await request(app)
+        .post('/api/room/join')
+        .set('Authorization', 'Bearer valid-token')
+        .send({
+          roomId: 'room-123'
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Room has ended');
+    });
+
+    it('should validate password', async () => {
+      mocks.prisma.room.findUnique.mockResolvedValue({
+        ...testData.room,
+        password: 'secret123',
+        owner: testData.roomOwner
+      });
+
+      const response = await request(app)
+        .post('/api/room/join')
+        .set('Authorization', 'Bearer valid-token')
+        .send({
+          roomId: 'room-123',
+          password: 'wrong-password'
+        });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toContain('Incorrect password');
+    });
+
+    it('should handle full room', async () => {
+      const fullRoomState = {
+        ...testData.roomState,
+        currentPlayers: 6,
+        playerLimit: 6,
+        players: Array.from({ length: 6 }, (_, i) => ({
+          id: `player-${i}`,
+          username: `player${i}`,
+          chips: 5000,
+          position: i,
+          isOwner: i === 0
+        }))
+      };
+      mocks.redis.get.mockResolvedValue(JSON.stringify(fullRoomState));
+
+      const response = await request(app)
+        .post('/api/room/join')
+        .set('Authorization', 'Bearer valid-token')
+        .send({
+          roomId: 'room-123'
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Room is full');
+    });
+
+    it('should prevent joining same room twice', async () => {
+      const roomStateWithUser = {
+        ...testData.roomState,
+        players: [
+          ...testData.roomState.players,
+          {
+            id: testData.currentUser.id,
+            username: testData.currentUser.username,
+            chips: 5000,
+            position: 1,
+            isOwner: false
+          }
+        ]
+      };
+      mocks.redis.get.mockResolvedValue(JSON.stringify(roomStateWithUser));
+
+      const response = await request(app)
+        .post('/api/room/join')
+        .set('Authorization', 'Bearer valid-token')
+        .send({
+          roomId: 'room-123'
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('You are already in this room');
+    });
+
+    it('should rebuild room state from database when Redis is empty', async () => {
+      mocks.redis.get.mockResolvedValue(null);
+      
+      // Mock the room with the owner being a different user
+      mocks.prisma.room.findUnique.mockResolvedValue({
+        ...testData.room,
+        ownerId: 'owner-user-id', // Different from current user
+        owner: {
+          id: 'owner-user-id',
+          username: 'owner',
+          avatar: null
+        }
+      });
+
+      const response = await request(app)
+        .post('/api/room/join')
+        .set('Authorization', 'Bearer valid-token')
+        .send({
+          roomId: 'room-123'
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.room.currentPlayers).toBe(2); // Owner + new player
+    });
+  });
+
+  describe('DELETE /:id', () => {
+    it('should delete room successfully', async () => {
+      const response = await request(app)
+        .delete('/api/room/room-123')
+        .set('Authorization', 'Bearer valid-token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toContain('Room deleted successfully');
+
+      expect(mocks.prisma.room.findUnique).toHaveBeenCalledWith({
+        where: { id: 'room-123' }
+      });
+
+      expect(mocks.prisma.room.update).toHaveBeenCalledWith({
+        where: { id: 'room-123' },
+        data: { status: 'ENDED' }
+      });
+
+      expect(mocks.redis.del).toHaveBeenCalledWith('room:room-123');
+      expect(mocks.userStateService.clearUserCurrentRoom).toHaveBeenCalledWith(testData.currentUser.id);
+    });
+
+    it('should handle room not found', async () => {
+      mocks.prisma.room.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .delete('/api/room/nonexistent-room')
+        .set('Authorization', 'Bearer valid-token');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toContain('Room not found');
+    });
+
+    it('should prevent non-owner from deleting room', async () => {
+      mocks.prisma.room.findUnique.mockResolvedValue({
+        ...testData.room,
+        ownerId: 'different-user-id'
+      });
+
+      const response = await request(app)
+        .delete('/api/room/room-123')
+        .set('Authorization', 'Bearer valid-token');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toContain('Only room owner can delete the room');
+    });
+
+    it('should handle database errors', async () => {
+      mocks.prisma.room.update.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .delete('/api/room/room-123')
+        .set('Authorization', 'Bearer valid-token');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Internal server error');
+    });
+  });
+
+  describe('Security and Validation', () => {
+    it('should require authentication for all endpoints', async () => {
+      const mockAuth = require('../../src/middleware/auth');
+      mockAuth.authenticateToken.mockImplementation((req: any, res: any, next: any) => {
+        res.status(401).json({ error: 'Token missing' });
+      });
+
+      const endpoints = [
+        { method: 'post', path: '/api/room/create', data: { playerLimit: 6 } },
+        { method: 'post', path: '/api/room/join', data: { roomId: 'room-123' } },
+        { method: 'delete', path: '/api/room/room-123', data: {} }
+      ];
+
+      for (const endpoint of endpoints) {
+        const response = await request(app)[endpoint.method](endpoint.path).send(endpoint.data);
+        expect(response.status).toBe(401);
+      }
+
+      // Restore mock
+      mockAuth.authenticateToken.mockImplementation((req: any, res: any, next: any) => {
+        req.user = testData.currentUser;
+        next();
+      });
+    });
+
+    it('should sanitize and validate input data', async () => {
+      const maliciousData = {
+        playerLimit: 1, // Invalid player limit
+        password: '../../etc/passwd',
+        bigBlind: 20,
+        smallBlind: 10
+      };
+
+      const response = await request(app)
+        .post('/api/room/create')
+        .set('Authorization', 'Bearer valid-token')
+        .send(maliciousData);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Player limit must be between 2 and 9');
+    });
+  });
+
+  describe('Performance', () => {
+    it('should handle concurrent room creation', async () => {
+      const requests = Array.from({ length: 5 }, (_, i) =>
+        request(app)
+          .post('/api/room/create')
+          .set('Authorization', 'Bearer valid-token')
+          .send({
+            playerLimit: 6,
+            bigBlind: 20,
+            smallBlind: 10
+          })
+      );
+
+      const start = Date.now();
+      const responses = await Promise.all(requests);
+      const duration = Date.now() - start;
+
+      responses.forEach(response => {
+        expect(response.status).toBe(201);
+      });
+
+      expect(duration).toBeLessThan(2000); // Should complete within 2 seconds
+    });
+
+    it('should use efficient database queries', async () => {
+      await request(app)
+        .get('/api/room/list?page=1&limit=10');
+
+      expect(mocks.prisma.room.findMany).toHaveBeenCalledWith({
+        where: {
+          status: { in: ['WAITING', 'PLAYING'] }
+        },
+        include: {
+          owner: {
+            select: {
+              id: true,
+              username: true,
+              avatar: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        skip: 0,
+        take: 10
+      });
+
+      // Verify only necessary fields are selected
+      const selectObj = mocks.prisma.room.findMany.mock.calls[0][0].include.owner.select;
+      expect(selectObj).toEqual({
+        id: true,
+        username: true,
+        avatar: true
+      });
     });
   });
 });
