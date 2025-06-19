@@ -238,6 +238,77 @@ export class MockFactory {
       callback: this.createCallbackMock()
     };
   }
+
+  /**
+   * 创建Express应用Mock对象
+   * 用于API路由测试
+   */
+  static createExpressMocks() {
+    return {
+      request: {
+        body: {},
+        params: {},
+        query: {},
+        headers: {},
+        user: {
+          id: 'test-user-id',
+          username: 'testuser'
+        }
+      },
+      response: {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+        send: jest.fn().mockReturnThis(),
+        cookie: jest.fn().mockReturnThis(),
+        clearCookie: jest.fn().mockReturnThis()
+      },
+      next: jest.fn()
+    };
+  }
+
+  /**
+   * 创建Auth相关Mock对象
+   * 包含JWT和bcrypt Mock
+   */
+  static createAuthMocks() {
+    return {
+      prisma: this.createPrismaMock(),
+      jwt: this.createJWTMock(),
+      bcrypt: this.createBcryptMock(),
+      express: this.createExpressMocks()
+    };
+  }
+
+  /**
+   * 创建游戏Handler测试所需的Mock对象
+   */
+  static createGameHandlerMocks() {
+    return {
+      socket: this.createSocketMock(),
+      io: this.createIOMock(),
+      prisma: this.createPrismaMock(),
+      redis: this.createRedisMock(),
+      userStateService: this.createUserStateServiceMock(),
+      validationMiddleware: this.createValidationMiddlewareMock(),
+      callback: this.createCallbackMock()
+    };
+  }
+
+  /**
+   * 创建通用服务层Mock对象
+   */
+  static createServiceMocks() {
+    return {
+      redis: this.createRedisMock(),
+      prisma: this.createPrismaMock(),
+      logger: {
+        info: jest.fn(),
+        error: jest.fn(),
+        warn: jest.fn(),
+        debug: jest.fn()
+      }
+    };
+  }
 }
 
 /**

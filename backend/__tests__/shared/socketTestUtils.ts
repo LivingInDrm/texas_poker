@@ -14,6 +14,10 @@ export function createMockAuthenticatedSocket(
     ...userData
   };
 
+  // Create an event emitter-like mock
+  const eventHandlers = new Map<string, Function[]>();
+  const clientEmitSpy = jest.fn(); // Spy for client-bound emissions
+  
   const mockSocket = {
     data: defaultData,
     id: 'mock-socket-id',
@@ -30,17 +34,40 @@ export function createMockAuthenticatedSocket(
       xdomain: false,
       issued: Date.now()
     },
-    emit: jest.fn(),
+    emit: jest.fn().mockImplementation(async (event: string, ...args: any[]) => {
+      // If this is a server-to-client event (not triggering a handler)
+      if (!eventHandlers.has(event)) {
+        clientEmitSpy(event, ...args);
+        return true;
+      }
+      
+      // Otherwise trigger the event handlers (client-to-server events)
+      const handlers = eventHandlers.get(event) || [];
+      for (const handler of handlers) {
+        await handler(...args);
+      }
+      return true;
+    }),
+    _clientEmitSpy: clientEmitSpy, // Expose for testing
     emitWithAck: jest.fn(),
-    on: jest.fn(),
+    on: jest.fn().mockImplementation((event: string, handler: Function) => {
+      if (!eventHandlers.has(event)) {
+        eventHandlers.set(event, []);
+      }
+      eventHandlers.get(event)!.push(handler);
+    }),
     once: jest.fn(),
     off: jest.fn(),
     join: jest.fn(),
     leave: jest.fn(),
-    to: jest.fn().mockReturnThis(),
+    to: jest.fn().mockReturnValue({
+      emit: jest.fn()
+    }),
     in: jest.fn().mockReturnThis(),
     except: jest.fn().mockReturnThis(),
-    broadcast: jest.fn().mockReturnThis(),
+    broadcast: jest.fn().mockReturnValue({
+      emit: jest.fn()
+    }),
     disconnect: jest.fn(),
     send: jest.fn(),
     write: jest.fn(),
@@ -142,14 +169,16 @@ export class SocketTestHelper {
    * 验证Socket.emit被调用
    */
   static expectSocketEmit(
-    socket: jest.Mocked<AuthenticatedSocket>,
+    socket: any,
     event: string,
     data?: any
   ): void {
+    // Use the client emit spy to check server-to-client emissions
+    const clientEmitSpy = socket._clientEmitSpy;
     if (data !== undefined) {
-      expect(socket.emit).toHaveBeenCalledWith(event, data);
+      expect(clientEmitSpy).toHaveBeenCalledWith(event, data);
     } else {
-      expect(socket.emit).toHaveBeenCalledWith(expect.stringMatching(event), expect.anything());
+      expect(clientEmitSpy).toHaveBeenCalledWith(expect.stringMatching(event), expect.anything());
     }
   }
 
@@ -184,16 +213,22 @@ export class SocketTestHelper {
   ): void {
     expect(socket.to).toHaveBeenCalledWith(roomId);
     
-    // 获取to()返回的mock对象，验证其emit方法
+    // Get the broadcast mock that was returned by socket.to()
     const toMock = socket.to as jest.Mock;
+    // The broadcast object should have had emit called on it
     const broadcastMock = toMock.mock.results[toMock.mock.results.length - 1]?.value;
     
-    if (broadcastMock && broadcastMock.emit) {
+    if (broadcastMock && typeof broadcastMock.emit === 'function') {
+      // Convert to jest mock if it isn't already
+      const emitSpy = broadcastMock.emit as jest.Mock;
       if (data !== undefined) {
-        expect(broadcastMock.emit).toHaveBeenCalledWith(event, data);
+        expect(emitSpy).toHaveBeenCalledWith(event, data);
       } else {
-        expect(broadcastMock.emit).toHaveBeenCalledWith(event, expect.anything());
+        expect(emitSpy).toHaveBeenCalledWith(event, expect.anything());
       }
+    } else {
+      // Fallback: just check that socket.to was called with correct room
+      expect(socket.to).toHaveBeenCalledWith(roomId);
     }
   }
 

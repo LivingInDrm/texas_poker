@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Texas Poker 统一测试执行脚本 v2.3
-# 基于重构后的功能域测试架构和TEST_STANDARDS.md规范
+# Texas Poker 统一测试执行脚本 v2.4
+# 基于新的测试目录架构: api/game/middleware/realtime/services/shared/legacy
+# 遵循BACKEND_TESTING_GUIDE.md规范
 set -e
 
 # 颜色定义
@@ -96,15 +97,25 @@ BACKEND_REALTIME_TESTS_PASSED=0
 BACKEND_REALTIME_TESTS_FAILED=0
 BACKEND_REALTIME_TESTS_SKIPPED=0
 
-# 数据存储测试
-BACKEND_STORAGE_FILES=0
-BACKEND_STORAGE_FILES_PASSED=0
-BACKEND_STORAGE_FILES_FAILED=0
-BACKEND_STORAGE_FILES_ERROR=0
-BACKEND_STORAGE_TESTS=0
-BACKEND_STORAGE_TESTS_PASSED=0
-BACKEND_STORAGE_TESTS_FAILED=0
-BACKEND_STORAGE_TESTS_SKIPPED=0
+# 中间件测试
+BACKEND_MIDDLEWARE_FILES=0
+BACKEND_MIDDLEWARE_FILES_PASSED=0
+BACKEND_MIDDLEWARE_FILES_FAILED=0
+BACKEND_MIDDLEWARE_FILES_ERROR=0
+BACKEND_MIDDLEWARE_TESTS=0
+BACKEND_MIDDLEWARE_TESTS_PASSED=0
+BACKEND_MIDDLEWARE_TESTS_FAILED=0
+BACKEND_MIDDLEWARE_TESTS_SKIPPED=0
+
+# 服务层测试
+BACKEND_SERVICES_FILES=0
+BACKEND_SERVICES_FILES_PASSED=0
+BACKEND_SERVICES_FILES_FAILED=0
+BACKEND_SERVICES_FILES_ERROR=0
+BACKEND_SERVICES_TESTS=0
+BACKEND_SERVICES_TESTS_PASSED=0
+BACKEND_SERVICES_TESTS_FAILED=0
+BACKEND_SERVICES_TESTS_SKIPPED=0
 
 # 后端总计
 BACKEND_TOTAL_FILES=0
@@ -273,15 +284,25 @@ parse_jest_results() {
                 BACKEND_REALTIME_TESTS_FAILED=$failed_tests
                 BACKEND_REALTIME_TESTS_SKIPPED=$skipped_tests
                 ;;
-            "storage")
-                BACKEND_STORAGE_FILES=$total_files
-                BACKEND_STORAGE_FILES_PASSED=$files_all_passed
-                BACKEND_STORAGE_FILES_FAILED=$files_some_failed
-                BACKEND_STORAGE_FILES_ERROR=$files_cannot_run
-                BACKEND_STORAGE_TESTS=$total_tests
-                BACKEND_STORAGE_TESTS_PASSED=$passed_tests
-                BACKEND_STORAGE_TESTS_FAILED=$failed_tests
-                BACKEND_STORAGE_TESTS_SKIPPED=$skipped_tests
+            "middleware")
+                BACKEND_MIDDLEWARE_FILES=$total_files
+                BACKEND_MIDDLEWARE_FILES_PASSED=$files_all_passed
+                BACKEND_MIDDLEWARE_FILES_FAILED=$files_some_failed
+                BACKEND_MIDDLEWARE_FILES_ERROR=$files_cannot_run
+                BACKEND_MIDDLEWARE_TESTS=$total_tests
+                BACKEND_MIDDLEWARE_TESTS_PASSED=$passed_tests
+                BACKEND_MIDDLEWARE_TESTS_FAILED=$failed_tests
+                BACKEND_MIDDLEWARE_TESTS_SKIPPED=$skipped_tests
+                ;;
+            "services")
+                BACKEND_SERVICES_FILES=$total_files
+                BACKEND_SERVICES_FILES_PASSED=$files_all_passed
+                BACKEND_SERVICES_FILES_FAILED=$files_some_failed
+                BACKEND_SERVICES_FILES_ERROR=$files_cannot_run
+                BACKEND_SERVICES_TESTS=$total_tests
+                BACKEND_SERVICES_TESTS_PASSED=$passed_tests
+                BACKEND_SERVICES_TESTS_FAILED=$failed_tests
+                BACKEND_SERVICES_TESTS_SKIPPED=$skipped_tests
                 ;;
         esac
     fi
@@ -432,10 +453,10 @@ run_backend_tests() {
     
     cd backend
     
-    # 运行所有后端测试 (基于新的__tests__目录结构)
+    # 运行所有后端测试 (基于新的__tests__目录结构, 排除legacy目录)
     log_info "执行所有后端测试套件..."
     local backend_all_log="$CURRENT_LOG_DIR/backend_all_tests.log"
-    if npm test > "../$backend_all_log" 2>&1; then
+    if npm test -- --testPathIgnorePatterns="__tests__/legacy" > "../$backend_all_log" 2>&1; then
         record_test_result "Backend All Tests" "pass"
     else
         record_test_result "Backend All Tests" "fail" "$backend_all_log"
@@ -476,26 +497,37 @@ run_backend_tests() {
     # 解析实时通信测试结果
     parse_jest_results "../$backend_realtime_log" "realtime"
     
-    # 运行数据存储测试
-    log_info "检查数据存储测试..."
-    local backend_storage_log="$CURRENT_LOG_DIR/backend_storage_tests.log"
-    if npm test -- --testPathPattern="__tests__/storage" > "../$backend_storage_log" 2>&1; then
-        record_test_result "Backend Storage Tests" "pass"
+    # 运行中间件测试
+    log_info "检查中间件测试..."
+    local backend_middleware_log="$CURRENT_LOG_DIR/backend_middleware_tests.log"
+    if npm test -- --testPathPattern="__tests__/middleware" > "../$backend_middleware_log" 2>&1; then
+        record_test_result "Backend Middleware Tests" "pass"
     else
-        record_test_result "Backend Storage Tests" "fail" "$backend_storage_log"
+        record_test_result "Backend Middleware Tests" "fail" "$backend_middleware_log"
     fi
-    # 解析存储测试结果（复用flow结构）
-    parse_jest_results "../$backend_storage_log" "storage"
+    # 解析中间件测试结果
+    parse_jest_results "../$backend_middleware_log" "middleware"
+    
+    # 运行服务层测试
+    log_info "检查服务层测试..."
+    local backend_services_log="$CURRENT_LOG_DIR/backend_services_tests.log"
+    if npm test -- --testPathPattern="__tests__/services" > "../$backend_services_log" 2>&1; then
+        record_test_result "Backend Services Tests" "pass"
+    else
+        record_test_result "Backend Services Tests" "fail" "$backend_services_log"
+    fi
+    # 解析服务层测试结果
+    parse_jest_results "../$backend_services_log" "services"
     
     # 计算后端总计统计
-    BACKEND_TOTAL_FILES=$((BACKEND_GAME_FILES + BACKEND_API_FILES + BACKEND_REALTIME_FILES + BACKEND_STORAGE_FILES))
-    BACKEND_TOTAL_FILES_PASSED=$((BACKEND_GAME_FILES_PASSED + BACKEND_API_FILES_PASSED + BACKEND_REALTIME_FILES_PASSED + BACKEND_STORAGE_FILES_PASSED))
-    BACKEND_TOTAL_FILES_FAILED=$((BACKEND_GAME_FILES_FAILED + BACKEND_API_FILES_FAILED + BACKEND_REALTIME_FILES_FAILED + BACKEND_STORAGE_FILES_FAILED))
-    BACKEND_TOTAL_FILES_ERROR=$((BACKEND_GAME_FILES_ERROR + BACKEND_API_FILES_ERROR + BACKEND_REALTIME_FILES_ERROR + BACKEND_STORAGE_FILES_ERROR))
-    BACKEND_TOTAL_TESTS=$((BACKEND_GAME_TESTS + BACKEND_API_TESTS + BACKEND_REALTIME_TESTS + BACKEND_STORAGE_TESTS))
-    BACKEND_TOTAL_PASSED=$((BACKEND_GAME_TESTS_PASSED + BACKEND_API_TESTS_PASSED + BACKEND_REALTIME_TESTS_PASSED + BACKEND_STORAGE_TESTS_PASSED))
-    BACKEND_TOTAL_FAILED=$((BACKEND_GAME_TESTS_FAILED + BACKEND_API_TESTS_FAILED + BACKEND_REALTIME_TESTS_FAILED + BACKEND_STORAGE_TESTS_FAILED))
-    BACKEND_TOTAL_SKIPPED=$((BACKEND_GAME_TESTS_SKIPPED + BACKEND_API_TESTS_SKIPPED + BACKEND_REALTIME_TESTS_SKIPPED + BACKEND_STORAGE_TESTS_SKIPPED))
+    BACKEND_TOTAL_FILES=$((BACKEND_GAME_FILES + BACKEND_API_FILES + BACKEND_REALTIME_FILES + BACKEND_MIDDLEWARE_FILES + BACKEND_SERVICES_FILES))
+    BACKEND_TOTAL_FILES_PASSED=$((BACKEND_GAME_FILES_PASSED + BACKEND_API_FILES_PASSED + BACKEND_REALTIME_FILES_PASSED + BACKEND_MIDDLEWARE_FILES_PASSED + BACKEND_SERVICES_FILES_PASSED))
+    BACKEND_TOTAL_FILES_FAILED=$((BACKEND_GAME_FILES_FAILED + BACKEND_API_FILES_FAILED + BACKEND_REALTIME_FILES_FAILED + BACKEND_MIDDLEWARE_FILES_FAILED + BACKEND_SERVICES_FILES_FAILED))
+    BACKEND_TOTAL_FILES_ERROR=$((BACKEND_GAME_FILES_ERROR + BACKEND_API_FILES_ERROR + BACKEND_REALTIME_FILES_ERROR + BACKEND_MIDDLEWARE_FILES_ERROR + BACKEND_SERVICES_FILES_ERROR))
+    BACKEND_TOTAL_TESTS=$((BACKEND_GAME_TESTS + BACKEND_API_TESTS + BACKEND_REALTIME_TESTS + BACKEND_MIDDLEWARE_TESTS + BACKEND_SERVICES_TESTS))
+    BACKEND_TOTAL_PASSED=$((BACKEND_GAME_TESTS_PASSED + BACKEND_API_TESTS_PASSED + BACKEND_REALTIME_TESTS_PASSED + BACKEND_MIDDLEWARE_TESTS_PASSED + BACKEND_SERVICES_TESTS_PASSED))
+    BACKEND_TOTAL_FAILED=$((BACKEND_GAME_TESTS_FAILED + BACKEND_API_TESTS_FAILED + BACKEND_REALTIME_TESTS_FAILED + BACKEND_MIDDLEWARE_TESTS_FAILED + BACKEND_SERVICES_TESTS_FAILED))
+    BACKEND_TOTAL_SKIPPED=$((BACKEND_GAME_TESTS_SKIPPED + BACKEND_API_TESTS_SKIPPED + BACKEND_REALTIME_TESTS_SKIPPED + BACKEND_MIDDLEWARE_TESTS_SKIPPED + BACKEND_SERVICES_TESTS_SKIPPED))
     
     # 运行测试覆盖率
     log_info "生成测试覆盖率报告..."
@@ -664,15 +696,21 @@ generate_detailed_stats() {
         echo "  🧪 测试用例: $BACKEND_REALTIME_TESTS (通过: $BACKEND_REALTIME_TESTS_PASSED, 失败: $BACKEND_REALTIME_TESTS_FAILED, 跳过: $BACKEND_REALTIME_TESTS_SKIPPED)"
     fi
     
-    if [ "$BACKEND_STORAGE_FILES" -gt 0 ]; then
-        echo "数据存储测试:"
-        echo "  📁 测试文件: $BACKEND_STORAGE_FILES (🟢通过: $BACKEND_STORAGE_FILES_PASSED, 🟡失败: $BACKEND_STORAGE_FILES_FAILED, 🔴无法运行: $BACKEND_STORAGE_FILES_ERROR)"
-        echo "  🧪 测试用例: $BACKEND_STORAGE_TESTS (通过: $BACKEND_STORAGE_TESTS_PASSED, 失败: $BACKEND_STORAGE_TESTS_FAILED, 跳过: $BACKEND_STORAGE_TESTS_SKIPPED)"
+    if [ "$BACKEND_MIDDLEWARE_FILES" -gt 0 ]; then
+        echo "中间件测试:"
+        echo "  📁 测试文件: $BACKEND_MIDDLEWARE_FILES (🟢通过: $BACKEND_MIDDLEWARE_FILES_PASSED, 🟡失败: $BACKEND_MIDDLEWARE_FILES_FAILED, 🔴无法运行: $BACKEND_MIDDLEWARE_FILES_ERROR)"
+        echo "  🧪 测试用例: $BACKEND_MIDDLEWARE_TESTS (通过: $BACKEND_MIDDLEWARE_TESTS_PASSED, 失败: $BACKEND_MIDDLEWARE_TESTS_FAILED, 跳过: $BACKEND_MIDDLEWARE_TESTS_SKIPPED)"
+    fi
+    
+    if [ "$BACKEND_SERVICES_FILES" -gt 0 ]; then
+        echo "服务层测试:"
+        echo "  📁 测试文件: $BACKEND_SERVICES_FILES (🟢通过: $BACKEND_SERVICES_FILES_PASSED, 🟡失败: $BACKEND_SERVICES_FILES_FAILED, 🔴无法运行: $BACKEND_SERVICES_FILES_ERROR)"
+        echo "  🧪 测试用例: $BACKEND_SERVICES_TESTS (通过: $BACKEND_SERVICES_TESTS_PASSED, 失败: $BACKEND_SERVICES_TESTS_FAILED, 跳过: $BACKEND_SERVICES_TESTS_SKIPPED)"
     fi
     
     # 验证数学一致性
-    local calculated_files=$((BACKEND_UNIT_FILES + BACKEND_INTEGRATION_FILES + BACKEND_FLOW_FILES))
-    local calculated_tests=$((BACKEND_UNIT_TESTS + BACKEND_INTEGRATION_TESTS + BACKEND_FLOW_TESTS))
+    local calculated_files=$((BACKEND_GAME_FILES + BACKEND_API_FILES + BACKEND_REALTIME_FILES + BACKEND_MIDDLEWARE_FILES + BACKEND_SERVICES_FILES))
+    local calculated_tests=$((BACKEND_GAME_TESTS + BACKEND_API_TESTS + BACKEND_REALTIME_TESTS + BACKEND_MIDDLEWARE_TESTS + BACKEND_SERVICES_TESTS))
     
     if [ "$calculated_files" -ne "$BACKEND_TOTAL_FILES" ] || [ "$calculated_tests" -ne "$BACKEND_TOTAL_TESTS" ]; then
         echo "⚠️  统计验证:"
@@ -769,12 +807,12 @@ generate_report() {
     # 保存报告到日志目录
     local report_file="$CURRENT_LOG_DIR/test_report.md"
     cat > "$report_file" << EOF
-# Texas Poker 测试执行报告 v2.3
+# Texas Poker 测试执行报告 v2.4
 
 **执行时间**: $(date)  
 **日志目录**: $CURRENT_LOG_DIR  
-**测试架构**: 基于重构后的功能域测试目录结构  
-**规范文档**: TEST_STANDARDS.md
+**测试架构**: 基于新的测试目录结构 api/game/middleware/realtime/services/shared/legacy  
+**规范文档**: BACKEND_TESTING_GUIDE.md
 
 ## 测试结果汇总
 
@@ -808,10 +846,16 @@ echo "**实时通信测试:**
 - 🧪 测试用例: $BACKEND_REALTIME_TESTS (通过: $BACKEND_REALTIME_TESTS_PASSED, 失败: $BACKEND_REALTIME_TESTS_FAILED, 跳过: $BACKEND_REALTIME_TESTS_SKIPPED)"
 fi)
 
-$(if [ "$BACKEND_STORAGE_FILES" -gt 0 ]; then
-echo "**数据存储测试:**
-- 📁 测试文件: $BACKEND_STORAGE_FILES (🟢通过: $BACKEND_STORAGE_FILES_PASSED, 🟡失败: $BACKEND_STORAGE_FILES_FAILED, 🔴无法运行: $BACKEND_STORAGE_FILES_ERROR)
-- 🧪 测试用例: $BACKEND_STORAGE_TESTS (通过: $BACKEND_STORAGE_TESTS_PASSED, 失败: $BACKEND_STORAGE_TESTS_FAILED, 跳过: $BACKEND_STORAGE_TESTS_SKIPPED)"
+$(if [ "$BACKEND_MIDDLEWARE_FILES" -gt 0 ]; then
+echo "**中间件测试:**
+- 📁 测试文件: $BACKEND_MIDDLEWARE_FILES (🟢通过: $BACKEND_MIDDLEWARE_FILES_PASSED, 🟡失败: $BACKEND_MIDDLEWARE_FILES_FAILED, 🔴无法运行: $BACKEND_MIDDLEWARE_FILES_ERROR)
+- 🧪 测试用例: $BACKEND_MIDDLEWARE_TESTS (通过: $BACKEND_MIDDLEWARE_TESTS_PASSED, 失败: $BACKEND_MIDDLEWARE_TESTS_FAILED, 跳过: $BACKEND_MIDDLEWARE_TESTS_SKIPPED)"
+fi)
+
+$(if [ "$BACKEND_SERVICES_FILES" -gt 0 ]; then
+echo "**服务层测试:**
+- 📁 测试文件: $BACKEND_SERVICES_FILES (🟢通过: $BACKEND_SERVICES_FILES_PASSED, 🟡失败: $BACKEND_SERVICES_FILES_FAILED, 🔴无法运行: $BACKEND_SERVICES_FILES_ERROR)
+- 🧪 测试用例: $BACKEND_SERVICES_TESTS (通过: $BACKEND_SERVICES_TESTS_PASSED, 失败: $BACKEND_SERVICES_TESTS_FAILED, 跳过: $BACKEND_SERVICES_TESTS_SKIPPED)"
 fi)
 
 ### 🎨 前端测试统计
@@ -859,7 +903,7 @@ fi)
 - 📈 通过率: $(( TESTS_PASSED * 100 / (TESTS_PASSED + TESTS_FAILED) ))%
 
 ## 测试架构
-- 🔧 后端: \`__tests__/{game,api,realtime,storage,shared}\` + Jest
+- 🔧 后端: \`__tests__/{api,game,middleware,realtime,services,shared,legacy}\` + Jest
 - 🎨 前端: \`__tests__/{components,pages,hooks,services}\` + Vitest + React Testing Library  
 - 🎭 E2E: \`e2e-tests/\` + Playwright
 

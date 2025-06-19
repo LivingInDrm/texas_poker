@@ -431,6 +431,210 @@ export class TestDataGenerator {
     this.counter = 0;
     this.sessionId = Math.random().toString(36).substring(2, 15);
   }
+
+  /**
+   * 创建唯一ID数组（高性能批量生成）
+   */
+  static generateUniqueIds(count: number, prefix: string = 'id'): string[] {
+    return Array.from({ length: count }, () => this.getUniqueId(prefix));
+  }
+
+  /**
+   * 批量创建用户数据（高性能）
+   */
+  static generateUsers(count: number, overrides: any = {}): any[] {
+    return Array.from({ length: count }, (_, index) => 
+      this.createUserData({ ...overrides, bulkIndex: index })
+    );
+  }
+
+  /**
+   * 批量创建房间状态数据（高性能）
+   */
+  static generateRoomStates(count: number, overrides: any = {}): any[] {
+    return Array.from({ length: count }, (_, index) => 
+      this.createRedisRoomStateData({ ...overrides, bulkIndex: index })
+    );
+  }
+
+  /**
+   * 创建游戏事件数据
+   */
+  static generateGameEvents(count: number, overrides: any = {}) {
+    return Array.from({ length: count }, (_, index) => ({
+      id: this.getUniqueId('event'),
+      type: overrides.type || 'bet',
+      playerId: overrides.playerId || this.getUniqueId('player'),
+      amount: overrides.amount || Math.floor(Math.random() * 1000),
+      timestamp: new Date(),
+      sequenceNumber: index,
+      ...overrides
+    }));
+  }
+
+  /**
+   * 创建JWT令牌数据
+   */
+  static generateAuthTokens(count: number, overrides: any = {}) {
+    return Array.from({ length: count }, () => ({
+      token: `jwt.token.${this.getUniqueId()}`,
+      type: overrides.type || 'Bearer',
+      payload: this.createJWTPayload(overrides.payload),
+      expiresIn: overrides.expiresIn || '1h',
+      ...overrides
+    }));
+  }
+
+  /**
+   * 创建API请求负载数据
+   */
+  static generateApiPayloads(count: number, type: 'room' | 'user' | 'game', overrides: any = {}) {
+    return Array.from({ length: count }, () => {
+      switch (type) {
+        case 'room':
+          return {
+            playerLimit: 6,
+            bigBlind: 20,
+            smallBlind: 10,
+            password: null,
+            ...overrides
+          };
+        case 'user':
+          return {
+            username: `user_${this.getUniqueId()}`,
+            password: 'testpassword123',
+            avatar: null,
+            ...overrides
+          };
+        case 'game':
+          return {
+            action: 'bet',
+            amount: 100,
+            roomId: this.getUniqueId('room'),
+            ...overrides
+          };
+        default:
+          return overrides;
+      }
+    });
+  }
+
+  /**
+   * 创建错误场景数据
+   */
+  static generateErrorScenarios(count: number, overrides: any = {}) {
+    const errorTypes = [
+      'VALIDATION_ERROR',
+      'AUTHENTICATION_ERROR', 
+      'AUTHORIZATION_ERROR',
+      'NOT_FOUND',
+      'CONFLICT',
+      'RATE_LIMIT',
+      'INTERNAL_ERROR'
+    ];
+
+    return Array.from({ length: count }, (_, index) => ({
+      type: errorTypes[index % errorTypes.length],
+      code: `ERR_${this.getUniqueId()}`,
+      message: `Test error scenario ${index + 1}`,
+      statusCode: 400 + (index % 5),
+      timestamp: new Date(),
+      ...overrides
+    }));
+  }
+}
+
+/**
+ * 定时器清理工具类
+ * 用于清理测试中创建的定时器
+ */
+export class TimerCleanup {
+  private static timers: Set<NodeJS.Timeout> = new Set();
+  private static intervals: Set<NodeJS.Timeout> = new Set();
+
+  /**
+   * 注册定时器以便清理
+   */
+  static registerTimer(timer: NodeJS.Timeout): NodeJS.Timeout {
+    this.timers.add(timer);
+    return timer;
+  }
+
+  /**
+   * 注册间隔定时器以便清理
+   */
+  static registerInterval(interval: NodeJS.Timeout): NodeJS.Timeout {
+    this.intervals.add(interval);
+    return interval;
+  }
+
+  /**
+   * 清理所有注册的定时器
+   */
+  static cleanup(): void {
+    this.timers.forEach(timer => {
+      clearTimeout(timer);
+    });
+    this.intervals.forEach(interval => {
+      clearInterval(interval);
+    });
+    this.timers.clear();
+    this.intervals.clear();
+  }
+
+  /**
+   * 创建带清理功能的setTimeout
+   */
+  static setTimeout(callback: () => void, delay: number): NodeJS.Timeout {
+    const timer = setTimeout(callback, delay);
+    return this.registerTimer(timer);
+  }
+
+  /**
+   * 创建带清理功能的setInterval
+   */
+  static setInterval(callback: () => void, delay: number): NodeJS.Timeout {
+    const interval = setInterval(callback, delay);
+    return this.registerInterval(interval);
+  }
+}
+
+/**
+ * TypeScript兼容性工具类
+ * 解决测试中的TypeScript类型问题
+ */
+export class TypeScriptCompatibility {
+  /**
+   * 安全的Mock函数转换
+   */
+  static asMockFunction<T extends (...args: any[]) => any>(fn: T): jest.MockedFunction<T> {
+    return fn as jest.MockedFunction<T>;
+  }
+
+  /**
+   * 安全的Mock对象转换
+   */
+  static asMockObject<T>(obj: T): jest.Mocked<T> {
+    return obj as jest.Mocked<T>;
+  }
+
+  /**
+   * 创建类型安全的Mock回调
+   */
+  static createTypedCallback<T = any>(): jest.MockedFunction<(response: T) => void> {
+    return jest.fn<void, [T]>();
+  }
+
+  /**
+   * 创建类型安全的Promise Mock
+   */
+  static createPromiseMock<T>(resolveValue?: T): jest.MockedFunction<() => Promise<T>> {
+    const mockFn = jest.fn();
+    if (resolveValue !== undefined) {
+      mockFn.mockResolvedValue(resolveValue);
+    }
+    return mockFn as jest.MockedFunction<() => Promise<T>>;
+  }
 }
 
 /**
@@ -469,6 +673,51 @@ export class RoomHandlerTestData {
 }
 
 /**
+ * API路由测试工具类
+ */
+export class ApiTestHelper {
+  /**
+   * 创建模拟Express应用
+   */
+  static createTestApp(mocks: any) {
+    const express = require('express');
+    const app = express();
+    
+    app.use(express.json());
+    
+    // Mock依赖注入
+    app.locals.prisma = mocks.prisma;
+    app.locals.redis = mocks.redis;
+    app.locals.userStateService = mocks.userStateService;
+    
+    return app;
+  }
+
+  /**
+   * 配置认证Mock
+   */
+  static setupAuthMocks(mocks: any, userData: any = {}) {
+    const defaultUser = {
+      id: 'test-user-id',
+      username: 'testuser',
+      ...userData
+    };
+
+    // Mock JWT验证
+    if (mocks.jwt) {
+      mocks.jwt.verify.mockImplementation((token: string) => {
+        if (token.replace('Bearer ', '') === 'valid-token') {
+          return defaultUser;
+        }
+        throw new Error('Invalid token');
+      });
+    }
+
+    return defaultUser;
+  }
+}
+
+/**
  * Mock数据配置辅助工具
  */
 export class MockDataConfigurator {
@@ -476,9 +725,20 @@ export class MockDataConfigurator {
    * 配置Prisma Mock返回指定的测试数据
    */
   static configurePrismaWithTestData(prismaMock: any, data: any) {
-    if (data.user) {
-      prismaMock.user.findUnique.mockResolvedValue(data.user);
-      prismaMock.user.create.mockResolvedValue(data.user);
+    if (data.validUser) {
+      // For findUnique, return full user data (including passwordHash for auth checks)
+      prismaMock.user.findUnique.mockResolvedValue(data.validUser);
+    }
+
+    if (data.newUser) {
+      // For create, return user data without passwordHash (as per API spec)
+      const userForResponse = {
+        id: data.newUser.id,
+        username: data.newUser.username,
+        avatar: data.newUser.avatar,
+        createdAt: data.newUser.createdAt
+      };
+      prismaMock.user.create.mockResolvedValue(userForResponse);
     }
 
     if (data.room) {
@@ -518,6 +778,40 @@ export class MockDataConfigurator {
       mocks.userStateService.getUserCurrentRoom.mockResolvedValue(null);
       mocks.userStateService.setUserCurrentRoom.mockResolvedValue(undefined);
       mocks.userStateService.clearUserCurrentRoom.mockResolvedValue(undefined);
+    }
+
+    // 配置定时器清理
+    TimerCleanup.cleanup();
+
+    return mocks;
+  }
+
+  /**
+   * 配置Auth Mock对象
+   */
+  static configureAuthMocks(mocks: any, testData: any) {
+    // 配置JWT Mock
+    if (mocks.jwt) {
+      mocks.jwt.verify.mockImplementation((token: string) => {
+        if (token === 'valid-token' || token.startsWith('Bearer valid-token')) {
+          return testData.jwtPayload || {
+            userId: 'test-user-id',
+            username: 'testuser',
+            iat: Math.floor(Date.now() / 1000),
+            exp: Math.floor(Date.now() / 1000) + 3600
+          };
+        }
+        throw new Error('Invalid token');
+      });
+      mocks.jwt.sign.mockReturnValue('mocked-jwt-token');
+    }
+
+    // 配置bcrypt Mock
+    if (mocks.bcrypt) {
+      mocks.bcrypt.compare.mockImplementation((password: string, hash: string) => {
+        return Promise.resolve(password === 'correct-password');
+      });
+      mocks.bcrypt.hash.mockResolvedValue('$2b$10$hashedpassword');
     }
 
     return mocks;
