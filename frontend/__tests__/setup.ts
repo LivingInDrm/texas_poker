@@ -83,3 +83,29 @@ Object.defineProperty(window, 'sessionStorage', {
 // Global test setup
 // Note: Global beforeEach should be handled in individual test files
 // This setup file is for global mocks and configurations only
+
+// 内存泄漏检测设置
+let originalConsoleWarn: typeof console.warn;
+
+beforeEach(() => {
+  // 捕获console.warn来检测potential memory leaks
+  originalConsoleWarn = console.warn;
+  console.warn = vi.fn().mockImplementation((message: string, ...args: any[]) => {
+    if (message.includes('memory leak') || message.includes('listener leak')) {
+      throw new Error(`Potential memory leak detected: ${message}`);
+    }
+    originalConsoleWarn(message, ...args);
+  });
+});
+
+afterEach(() => {
+  // 恢复原始console.warn
+  if (originalConsoleWarn) {
+    console.warn = originalConsoleWarn;
+  }
+  
+  // 强制垃圾收集（如果可用）
+  if (global.gc) {
+    global.gc();
+  }
+});

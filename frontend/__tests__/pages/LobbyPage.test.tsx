@@ -284,7 +284,12 @@ describe('LobbyPage', () => {
     });
 
     it('should show loading state during quick start', async () => {
-      const mockQuickStart = vi.fn().mockReturnValue(new Promise(() => {})); // Never resolves
+      // Create a promise that can be controlled
+      let resolvePromise: (value: any) => void;
+      const pendingPromise = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+      const mockQuickStart = vi.fn().mockReturnValue(pendingPromise);
 
       const { useSocket } = await import('../../src/hooks/useSocket');
       (useSocket as any).mockReturnValue({
@@ -296,13 +301,17 @@ describe('LobbyPage', () => {
         joinRoom: vi.fn()
       });
 
-      renderLobbyPage();
+      const { unmount } = renderLobbyPage();
       
       const quickStartButton = screen.getByRole('button', { name: /快速开始/ });
       fireEvent.click(quickStartButton);
       
       expect(screen.getByText('匹配中...')).toBeInTheDocument();
       expect(quickStartButton).toBeDisabled();
+
+      // Clean up: resolve the promise and unmount
+      resolvePromise!({ success: true, data: { roomId: 'test-room' } });
+      unmount();
     });
 
     it('should navigate to game room on successful quick start', async () => {
@@ -517,13 +526,15 @@ describe('LobbyPage', () => {
       });
 
       vi.useFakeTimers();
-      renderLobbyPage();
+      const { unmount } = renderLobbyPage();
       
       // Advance time by 10 seconds
       vi.advanceTimersByTime(10000);
       
       expect(mockRefreshRooms).toHaveBeenCalled();
       
+      // Clean up: unmount component and restore timers
+      unmount();
       vi.useRealTimers();
     });
 

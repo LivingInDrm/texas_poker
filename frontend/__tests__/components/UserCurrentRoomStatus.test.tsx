@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import UserCurrentRoomStatus from '../../src/components/UserCurrentRoomStatus';
 
 // Mock the useSocket hook
@@ -22,9 +22,17 @@ vi.mock('react-router-dom', () => ({
 
 describe('UserCurrentRoomStatus', () => {
   const mockOnLeaveRoom = vi.fn();
+  let consoleErrorSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Suppress console.error during tests to avoid noise in test output
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // Restore console.error after each test
+    consoleErrorSpy.mockRestore();
   });
 
   it('renders nothing when currentRoomId is null', () => {
@@ -189,10 +197,15 @@ describe('UserCurrentRoomStatus', () => {
     });
   });
 
-  it('shows loading state initially', () => {
-    mockGetCurrentRoomStatus.mockImplementation(() => new Promise(() => {})); // Never resolves
+  it('shows loading state initially', async () => {
+    // Use a promise that resolves after test expectations
+    let resolvePromise: (value: any) => void;
+    const pendingPromise = new Promise((resolve) => {
+      resolvePromise = resolve;
+    });
+    mockGetCurrentRoomStatus.mockImplementation(() => pendingPromise);
 
-    render(
+    const { unmount } = render(
       <UserCurrentRoomStatus 
         currentRoomId="room-loading" 
         onLeaveRoom={mockOnLeaveRoom}
@@ -203,6 +216,17 @@ describe('UserCurrentRoomStatus', () => {
     expect(screen.getByText('room-loading')).toBeInTheDocument();
     // Details should not be visible yet
     expect(screen.queryByText('玩家数:')).not.toBeInTheDocument();
+
+    // Clean up: resolve the promise and unmount component
+    resolvePromise!({
+      roomId: 'room-loading',
+      roomDetails: {
+        playerCount: 1,
+        isGameStarted: false,
+        roomState: { status: 'waiting' }
+      }
+    });
+    unmount();
   });
 
   it('applies custom className when provided', () => {
