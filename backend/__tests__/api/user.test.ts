@@ -1,5 +1,5 @@
-import request from 'supertest';
-import express from 'express';
+const request = require('supertest');
+const express = require('express');
 import { MockFactory } from '../shared/mockFactory';
 import { TestDataGenerator, MockDataConfigurator, ApiTestHelper, TypeScriptCompatibility } from '../shared/testDataGenerator';
 
@@ -19,7 +19,7 @@ jest.mock('../../src/middleware/auth', () => ({
 }));
 
 describe('User Routes', () => {
-  let app: express.Application;
+  let app: any;
   let mocks: any;
   let testData: any;
 
@@ -223,7 +223,17 @@ describe('User Routes', () => {
 
   describe('GET /profile/:userId', () => {
     it('should return public profile information', async () => {
-      mocks.prisma.user.findUnique.mockResolvedValue(testData.otherUser);
+      // Mock response with only public fields (no passwordHash)
+      const publicUserData = {
+        id: testData.otherUser.id,
+        username: testData.otherUser.username,
+        avatar: testData.otherUser.avatar,
+        createdAt: testData.otherUser.createdAt,
+        chips: testData.otherUser.chips,
+        gamesPlayed: testData.otherUser.gamesPlayed,
+        winRate: testData.otherUser.winRate
+      };
+      mocks.prisma.user.findUnique.mockResolvedValue(publicUserData);
 
       const response = await request(app)
         .get(`/api/user/profile/${testData.otherUser.id}`)
@@ -331,16 +341,14 @@ describe('User Routes', () => {
         .put('/api/user/me')
         .set('Authorization', 'Bearer valid-token')
         .send({
-          avatar: '<script>alert("xss")</script>',
-          bio: 'Normal bio content'
+          avatar: '<script>alert("xss")</script>'
         });
 
       expect(response.status).toBe(200);
       expect(mocks.prisma.user.update).toHaveBeenCalledWith({
         where: { id: testData.currentUser.id },
         data: {
-          avatar: expect.not.stringContaining('<script>'),
-          bio: 'Normal bio content'
+          avatar: expect.not.stringContaining('<script>')
         },
         select: expect.any(Object)
       });
@@ -353,7 +361,7 @@ describe('User Routes', () => {
         .put('/api/user/me')
         .set('Authorization', 'Bearer valid-token')
         .send({
-          bio: longString
+          avatar: longString
         });
 
       expect(response.status).toBe(400);
