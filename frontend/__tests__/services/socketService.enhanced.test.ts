@@ -1,18 +1,38 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createSocketTestUtils, AsyncTestUtils, MockDataFactory } from '../test-infrastructure';
 
+// 标识当前为服务测试上下文 (必须在mock之前设置)
+globalThis.__VITEST_SERVICE_TEST__ = true;
+globalThis.__VITEST_TEST_TYPE__ = 'service';
+
 // 在导入socketService之前设置mock
 let socketUtils: ReturnType<typeof createSocketTestUtils>;
 
-// Mock socket.io-client模块
+// Context-aware mock for socket.io-client
 vi.mock('socket.io-client', () => {
   return {
     io: vi.fn(() => {
-      if (!socketUtils) {
-        const { createSocketTestUtils } = require('../test-infrastructure');
-        socketUtils = createSocketTestUtils();
+      // 只在服务测试上下文中创建完整的Mock
+      if (globalThis.__VITEST_SERVICE_TEST__) {
+        if (!socketUtils) {
+          const { createSocketTestUtils } = require('../test-infrastructure');
+          socketUtils = createSocketTestUtils();
+        }
+        return socketUtils.mockSocket;
       }
-      return socketUtils.mockSocket;
+      
+      // 为非服务测试提供简单的fallback mock
+      return {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        once: vi.fn(),
+        connected: false,
+        setConnectionState: vi.fn(),
+        triggerEvent: vi.fn()
+      };
     })
   };
 });
@@ -22,6 +42,9 @@ import socketService from '../../src/services/socketService';
 
 describe('SocketService Enhanced Features', () => {
   beforeEach(() => {
+    // Mark this as a service test at the start
+    globalThis.__VITEST_SERVICE_TEST__ = true;
+    
     // 创建Socket测试工具
     socketUtils = createSocketTestUtils({
       autoConnect: false,
@@ -37,9 +60,15 @@ describe('SocketService Enhanced Features', () => {
   afterEach(() => {
     // 清理所有异步资源
     AsyncTestUtils.cleanup();
-    socketUtils.cleanup();
+    if (socketUtils) {
+      socketUtils.cleanup();
+    }
     socketService.disconnect();
     vi.clearAllMocks();
+    
+    // 清理全局标识 (重要：防止影响其他测试)
+    globalThis.__VITEST_SERVICE_TEST__ = undefined;
+    globalThis.__VITEST_TEST_TYPE__ = undefined;
   });
 
   describe('getUserCurrentRoomStatus', () => {

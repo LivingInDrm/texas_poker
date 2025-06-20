@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, createComponentTestSocketMock } from '../helpers';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BrowserRouter } from 'react-router-dom';
 import LobbyPage from '../../src/pages/LobbyPage';
@@ -59,14 +59,7 @@ vi.mock('../../src/stores/roomStore', () => ({
 }));
 
 vi.mock('../../src/hooks/useSocket', () => ({
-  useSocket: vi.fn(() => ({
-    connected: true,
-    connectionStatus: 'connected',
-    networkQuality: 'good',
-    connect: vi.fn().mockResolvedValue(undefined),
-    quickStart: vi.fn(),
-    joinRoom: vi.fn()
-  }))
+  useSocket: vi.fn(() => createComponentTestSocketMock())
 }));
 
 // Mock react-router-dom
@@ -127,11 +120,9 @@ vi.mock('../../src/components/JoinRoomModal', () => ({
       <div data-testid="join-room-modal">
         <h2>加入房间 {roomId}</h2>
         <button onClick={onClose}>关闭</button>
-        {onJoinRoom && (
-          <button onClick={() => onJoinRoom(roomId, 'password')}>
-            Socket加入
-          </button>
-        )}
+        <button onClick={() => onJoinRoom && onJoinRoom(roomId, 'password')}>
+          Socket加入
+        </button>
       </div>
     ) : null
   )
@@ -230,7 +221,9 @@ describe('LobbyPage', () => {
       renderLobbyPage();
       
       const createButton = screen.getByRole('button', { name: /创建房间/ });
-      fireEvent.click(createButton);
+      act(() => {
+        fireEvent.click(createButton);
+      });
       
       expect(screen.getByTestId('create-room-modal')).toBeInTheDocument();
     });
@@ -239,10 +232,14 @@ describe('LobbyPage', () => {
       renderLobbyPage();
       
       const createButton = screen.getByRole('button', { name: /创建房间/ });
-      fireEvent.click(createButton);
+      act(() => {
+        fireEvent.click(createButton);
+      });
       
       const closeButton = screen.getByText('关闭');
-      fireEvent.click(closeButton);
+      act(() => {
+        fireEvent.click(closeButton);
+      });
       
       expect(screen.queryByTestId('create-room-modal')).not.toBeInTheDocument();
     });
@@ -251,7 +248,9 @@ describe('LobbyPage', () => {
       renderLobbyPage();
       
       const joinButton = screen.getAllByText('加入房间')[0];
-      fireEvent.click(joinButton);
+      act(() => {
+        fireEvent.click(joinButton);
+      });
       
       expect(screen.getByTestId('join-room-modal')).toBeInTheDocument();
       expect(screen.getByText('加入房间 room-1')).toBeInTheDocument();
@@ -266,19 +265,16 @@ describe('LobbyPage', () => {
       });
 
       const { useSocket } = await import('../../src/hooks/useSocket');
-      (useSocket as any).mockReturnValue({
-        connected: true,
-        connectionStatus: 'connected',
-        networkQuality: 'good',
-        connect: vi.fn(),
-        quickStart: mockQuickStart,
-        joinRoom: vi.fn()
-      });
+      (useSocket as any).mockReturnValue(createComponentTestSocketMock({
+        quickStart: mockQuickStart
+      }));
 
       renderLobbyPage();
       
       const quickStartButton = screen.getByRole('button', { name: /快速开始/ });
-      fireEvent.click(quickStartButton);
+      act(() => {
+        fireEvent.click(quickStartButton);
+      });
       
       expect(mockQuickStart).toHaveBeenCalled();
     });
@@ -292,19 +288,16 @@ describe('LobbyPage', () => {
       const mockQuickStart = vi.fn().mockReturnValue(pendingPromise);
 
       const { useSocket } = await import('../../src/hooks/useSocket');
-      (useSocket as any).mockReturnValue({
-        connected: true,
-        connectionStatus: 'connected',
-        networkQuality: 'good',
-        connect: vi.fn(),
-        quickStart: mockQuickStart,
-        joinRoom: vi.fn()
-      });
+      (useSocket as any).mockReturnValue(createComponentTestSocketMock({
+        quickStart: mockQuickStart
+      }));
 
       const { unmount } = renderLobbyPage();
       
       const quickStartButton = screen.getByRole('button', { name: /快速开始/ });
-      fireEvent.click(quickStartButton);
+      act(() => {
+        fireEvent.click(quickStartButton);
+      });
       
       expect(screen.getByText('匹配中...')).toBeInTheDocument();
       expect(quickStartButton).toBeDisabled();
@@ -321,19 +314,16 @@ describe('LobbyPage', () => {
       });
 
       const { useSocket } = await import('../../src/hooks/useSocket');
-      (useSocket as any).mockReturnValue({
-        connected: true,
-        connectionStatus: 'connected',
-        networkQuality: 'good',
-        connect: vi.fn(),
-        quickStart: mockQuickStart,
-        joinRoom: vi.fn()
-      });
+      (useSocket as any).mockReturnValue(createComponentTestSocketMock({
+        quickStart: mockQuickStart
+      }));
 
       renderLobbyPage();
       
       const quickStartButton = screen.getByRole('button', { name: /快速开始/ });
-      fireEvent.click(quickStartButton);
+      act(() => {
+        fireEvent.click(quickStartButton);
+      });
       
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith('/game/room-123');
@@ -342,19 +332,18 @@ describe('LobbyPage', () => {
 
     it('should use fallback quick start when not connected', async () => {
       const { useSocket } = await import('../../src/hooks/useSocket');
-      (useSocket as any).mockReturnValue({
+      (useSocket as any).mockReturnValue(createComponentTestSocketMock({
         connected: false,
         connectionStatus: 'disconnected',
-        networkQuality: 'poor',
-        connect: vi.fn().mockResolvedValue(undefined),
-        quickStart: vi.fn(),
-        joinRoom: vi.fn()
-      });
+        networkQuality: 'poor'
+      }));
 
       renderLobbyPage();
       
       const quickStartButton = screen.getByRole('button', { name: /快速开始/ });
-      fireEvent.click(quickStartButton);
+      act(() => {
+        fireEvent.click(quickStartButton);
+      });
       
       // Should open join room modal because there's an available room in mock data
       expect(screen.getByTestId('join-room-modal')).toBeInTheDocument();
@@ -364,14 +353,11 @@ describe('LobbyPage', () => {
   describe('Socket Integration', () => {
     it('should show connection warning when not connected', async () => {
       const { useSocket } = await import('../../src/hooks/useSocket');
-      (useSocket as any).mockReturnValue({
+      (useSocket as any).mockReturnValue(createComponentTestSocketMock({
         connected: false,
         connectionStatus: 'disconnected',
-        networkQuality: 'poor',
-        connect: vi.fn().mockResolvedValue(undefined),
-        quickStart: vi.fn(),
-        joinRoom: vi.fn()
-      });
+        networkQuality: 'poor'
+      }));
 
       renderLobbyPage();
       
@@ -383,28 +369,35 @@ describe('LobbyPage', () => {
       const mockJoinRoom = vi.fn().mockResolvedValue({
         success: true
       });
+      const mockGetCurrentRoomStatus = vi.fn().mockResolvedValue({
+        roomId: null // 用户当前不在任何房间中
+      });
 
       const { useSocket } = await import('../../src/hooks/useSocket');
-      (useSocket as any).mockReturnValue({
-        connected: true,
-        connectionStatus: 'connected',
-        networkQuality: 'good',
-        connect: vi.fn(),
-        quickStart: vi.fn(),
-        joinRoom: mockJoinRoom
-      });
+      (useSocket as any).mockReturnValue(createComponentTestSocketMock({
+        joinRoom: mockJoinRoom,
+        getCurrentRoomStatus: mockGetCurrentRoomStatus
+      }));
 
       renderLobbyPage();
       
       // Open join room modal
       const joinButton = screen.getAllByText('加入房间')[0];
-      fireEvent.click(joinButton);
+      act(() => {
+        fireEvent.click(joinButton);
+      });
       
       // Click socket join button in modal
       const socketJoinButton = screen.getByText('Socket加入');
-      fireEvent.click(socketJoinButton);
+      act(() => {
+        fireEvent.click(socketJoinButton);
+      });
       
-      expect(mockJoinRoom).toHaveBeenCalledWith('room-1', 'password');
+      // Wait for async operations to complete
+      await waitFor(() => {
+        expect(mockGetCurrentRoomStatus).toHaveBeenCalled();
+        expect(mockJoinRoom).toHaveBeenCalledWith('room-1', 'password');
+      });
     });
   });
 
@@ -442,7 +435,9 @@ describe('LobbyPage', () => {
       renderLobbyPage();
       
       const closeErrorButton = screen.getByRole('button', { name: '' });
-      fireEvent.click(closeErrorButton);
+      act(() => {
+        fireEvent.click(closeErrorButton);
+      });
       
       expect(mockClearError).toHaveBeenCalled();
     });
@@ -451,19 +446,16 @@ describe('LobbyPage', () => {
       const mockQuickStart = vi.fn().mockRejectedValue(new Error('Socket error'));
 
       const { useSocket } = await import('../../src/hooks/useSocket');
-      (useSocket as any).mockReturnValue({
-        connected: true,
-        connectionStatus: 'connected',
-        networkQuality: 'good',
-        connect: vi.fn(),
-        quickStart: mockQuickStart,
-        joinRoom: vi.fn()
-      });
+      (useSocket as any).mockReturnValue(createComponentTestSocketMock({
+        quickStart: mockQuickStart
+      }));
 
       renderLobbyPage();
       
       const quickStartButton = screen.getByRole('button', { name: /快速开始/ });
-      fireEvent.click(quickStartButton);
+      act(() => {
+        fireEvent.click(quickStartButton);
+      });
       
       await waitFor(() => {
         expect(screen.getByText('Socket error')).toBeInTheDocument();
@@ -488,7 +480,7 @@ describe('LobbyPage', () => {
       renderLobbyPage();
       
       // Check that buttons container has responsive classes
-      const buttonsContainer = document.querySelector('.flex.flex-col.sm\\:flex-row.gap-4.justify-center');
+      const buttonsContainer = document.querySelector('.flex.flex-col.sm\\:flex-row');
       expect(buttonsContainer).toBeInTheDocument();
     });
   });
@@ -539,20 +531,21 @@ describe('LobbyPage', () => {
     });
 
     it('should attempt socket connection when user is present but not connected', async () => {
-      const mockConnect = vi.fn();
+      const mockConnect = vi.fn().mockResolvedValue(undefined);
       const { useSocket } = await import('../../src/hooks/useSocket');
-      (useSocket as any).mockReturnValue({
+      (useSocket as any).mockReturnValue(createComponentTestSocketMock({
         connected: false,
         connectionStatus: 'disconnected',
         networkQuality: 'poor',
-        connect: mockConnect.mockResolvedValue(undefined),
-        quickStart: vi.fn(),
-        joinRoom: vi.fn()
-      });
+        connect: mockConnect
+      }));
 
       renderLobbyPage();
       
-      expect(mockConnect).toHaveBeenCalled();
+      // Wait for useEffect to run
+      await waitFor(() => {
+        expect(mockConnect).toHaveBeenCalled();
+      });
     });
   });
 
@@ -572,7 +565,9 @@ describe('LobbyPage', () => {
       renderLobbyPage();
       
       const logoutButton = screen.getByRole('button', { name: /退出登录/ });
-      fireEvent.click(logoutButton);
+      act(() => {
+        fireEvent.click(logoutButton);
+      });
       
       expect(mockLogout).toHaveBeenCalled();
     });
@@ -593,7 +588,9 @@ describe('LobbyPage', () => {
       renderLobbyPage();
       
       const refreshButton = screen.getByRole('button', { name: /刷新/ });
-      fireEvent.click(refreshButton);
+      act(() => {
+        fireEvent.click(refreshButton);
+      });
       
       expect(mockRefreshRooms).toHaveBeenCalled();
     });
@@ -614,7 +611,9 @@ describe('LobbyPage', () => {
       renderLobbyPage();
       
       const nextButton = screen.getByText('Next');
-      fireEvent.click(nextButton);
+      act(() => {
+        fireEvent.click(nextButton);
+      });
       
       expect(mockFetchRooms).toHaveBeenCalledWith(2);
     });

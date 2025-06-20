@@ -74,12 +74,13 @@ export function validateUseSocketMock(mockObject: any): boolean {
 /**
  * 为组件测试创建标准的useSocket Mock
  */
-export function createComponentTestSocketMock() {
+export function createComponentTestSocketMock(overrides: Partial<any> = {}) {
   return createUseSocketMock({
     connected: true,
     connectionStatus: 'connected',
     networkQuality: 'good',
-    getCurrentRoomStatus: vi.fn().mockResolvedValue({ roomId: null })
+    getCurrentRoomStatus: vi.fn().mockResolvedValue({ roomId: null }),
+    ...overrides
   });
 }
 

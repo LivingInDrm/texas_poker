@@ -232,6 +232,15 @@ describe('UserCurrentRoomStatus', () => {
   it('applies custom className when provided', () => {
     const customClass = 'custom-test-class';
     
+    mockGetCurrentRoomStatus.mockResolvedValue({
+      roomId: 'room-123',
+      roomDetails: {
+        playerCount: 3,
+        isGameStarted: false,
+        roomState: { status: 'waiting' }
+      }
+    });
+    
     render(
       <UserCurrentRoomStatus 
         currentRoomId="room-123" 

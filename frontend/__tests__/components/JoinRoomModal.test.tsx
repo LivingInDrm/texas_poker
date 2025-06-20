@@ -23,7 +23,7 @@ const mockRooms: Room[] = [
     ownerId: 'user-2',
     owner: { id: 'user-2', username: 'player2' },
     playerLimit: 4,
-    currentPlayers: 4,
+    currentPlayers: 2,
     hasPassword: true,
     status: 'WAITING',
     bigBlind: 40,
@@ -131,12 +131,16 @@ describe('JoinRoomModal', () => {
     });
 
     it('should handle ended status with gray color', async () => {
-      // Create a room with ENDED status
-      const endedRoom = { ...mockRooms[0], status: 'ENDED' as const };
+      // Create a room with ENDED status and unique ID
+      const endedRoom = { 
+        ...mockRooms[0], 
+        id: 'room-ended',
+        status: 'ENDED' as const 
+      };
       const roomsWithEnded = [...mockRooms, endedRoom];
       
       const { useRoomStore } = await import('../../src/stores/roomStore');
-      useRoomStore.mockReturnValue({
+      (useRoomStore as any).mockReturnValue({
         rooms: roomsWithEnded,
         joinRoom: mockJoinRoom,
         isLoading: false
@@ -169,7 +173,7 @@ describe('JoinRoomModal', () => {
     });
 
     it('should clear error when modal opens', () => {
-      render(<JoinRoomModal {...defaultProps} roomId="room-2" />);
+      const { rerender } = render(<JoinRoomModal {...defaultProps} roomId="room-2" />);
       
       // Create an error by submitting without password
       const form = document.querySelector('form');
@@ -178,7 +182,7 @@ describe('JoinRoomModal', () => {
       expect(screen.getByText('请输入房间密码')).toBeInTheDocument();
       
       // Mock modal closing and reopening
-      const { rerender } = render(<JoinRoomModal {...defaultProps} isOpen={false} roomId="room-2" />);
+      rerender(<JoinRoomModal {...defaultProps} isOpen={false} roomId="room-2" />);
       rerender(<JoinRoomModal {...defaultProps} isOpen={true} roomId="room-2" />);
       
       expect(screen.queryByText('请输入房间密码')).not.toBeInTheDocument();
@@ -212,9 +216,13 @@ describe('JoinRoomModal', () => {
     });
 
     it('should not validate password for non-password rooms', async () => {
+      // Remove onJoinRoom prop to use store joinRoom instead
+      const propsWithoutOnJoinRoom = { ...defaultProps };
+      delete propsWithoutOnJoinRoom.onJoinRoom;
+      
       mockJoinRoom.mockResolvedValue({ room: mockRooms[0] });
       
-      render(<JoinRoomModal {...defaultProps} roomId="room-1" />);
+      render(<JoinRoomModal {...propsWithoutOnJoinRoom} roomId="room-1" />);
       
       const form = document.querySelector('form');
       fireEvent.submit(form);
@@ -236,9 +244,13 @@ describe('JoinRoomModal', () => {
 
   describe('Form Submission', () => {
     it('should call joinRoom with correct data for password room', async () => {
+      // Remove onJoinRoom prop to use store joinRoom instead
+      const propsWithoutOnJoinRoom = { ...defaultProps };
+      delete propsWithoutOnJoinRoom.onJoinRoom;
+      
       mockJoinRoom.mockResolvedValue({ room: mockRooms[1] });
       
-      render(<JoinRoomModal {...defaultProps} roomId="room-2" />);
+      render(<JoinRoomModal {...propsWithoutOnJoinRoom} roomId="room-2" />);
       
       const passwordInput = screen.getByPlaceholderText('请输入房间密码');
       const submitButton = screen.getByRole('button', { name: '加入房间' });
@@ -255,9 +267,13 @@ describe('JoinRoomModal', () => {
     });
 
     it('should call joinRoom without password for non-password room', async () => {
+      // Remove onJoinRoom prop to use store joinRoom instead
+      const propsWithoutOnJoinRoom = { ...defaultProps };
+      delete propsWithoutOnJoinRoom.onJoinRoom;
+      
       mockJoinRoom.mockResolvedValue({ room: mockRooms[0] });
       
-      render(<JoinRoomModal {...defaultProps} roomId="room-1" />);
+      render(<JoinRoomModal {...propsWithoutOnJoinRoom} roomId="room-1" />);
       
       const submitButton = screen.getByRole('button', { name: '加入房间' });
       fireEvent.click(submitButton);
@@ -272,9 +288,13 @@ describe('JoinRoomModal', () => {
 
     it('should reset form and close modal on successful join', async () => {
       const mockOnClose = vi.fn();
+      // Remove onJoinRoom prop to use store joinRoom instead
+      const propsWithoutOnJoinRoom = { ...defaultProps, onClose: mockOnClose };
+      delete propsWithoutOnJoinRoom.onJoinRoom;
+      
       mockJoinRoom.mockResolvedValue({ room: mockRooms[1] });
       
-      render(<JoinRoomModal {...defaultProps} onClose={mockOnClose} roomId="room-2" />);
+      render(<JoinRoomModal {...propsWithoutOnJoinRoom} roomId="room-2" />);
       
       const passwordInput = screen.getByPlaceholderText('请输入房间密码');
       const submitButton = screen.getByRole('button', { name: '加入房间' });
@@ -290,9 +310,13 @@ describe('JoinRoomModal', () => {
     });
 
     it('should trim password before submission', async () => {
+      // Remove onJoinRoom prop to use store joinRoom instead
+      const propsWithoutOnJoinRoom = { ...defaultProps };
+      delete propsWithoutOnJoinRoom.onJoinRoom;
+      
       mockJoinRoom.mockResolvedValue({ room: mockRooms[1] });
       
-      render(<JoinRoomModal {...defaultProps} roomId="room-2" />);
+      render(<JoinRoomModal {...propsWithoutOnJoinRoom} roomId="room-2" />);
       
       const passwordInput = screen.getByPlaceholderText('请输入房间密码');
       const submitButton = screen.getByRole('button', { name: '加入房间' });
@@ -309,9 +333,13 @@ describe('JoinRoomModal', () => {
     });
 
     it('should handle submission errors gracefully', async () => {
+      // Remove onJoinRoom prop to use store joinRoom instead
+      const propsWithoutOnJoinRoom = { ...defaultProps };
+      delete propsWithoutOnJoinRoom.onJoinRoom;
+      
       mockJoinRoom.mockRejectedValue(new Error('Wrong password'));
       
-      render(<JoinRoomModal {...defaultProps} roomId="room-2" />);
+      render(<JoinRoomModal {...propsWithoutOnJoinRoom} roomId="room-2" />);
       
       const passwordInput = screen.getByPlaceholderText('请输入房间密码');
       const submitButton = screen.getByRole('button', { name: '加入房间' });
@@ -327,8 +355,24 @@ describe('JoinRoomModal', () => {
   });
 
   describe('Warning Messages', () => {
-    it('should show warning for full room', () => {
-      render(<JoinRoomModal {...defaultProps} roomId="room-2" />);
+    it('should show warning for full room', async () => {
+      // Create a full room
+      const fullRoom = { 
+        ...mockRooms[1], 
+        id: 'room-full',
+        currentPlayers: 4,
+        playerLimit: 4
+      };
+      const roomsWithFull = [...mockRooms, fullRoom];
+      
+      const { useRoomStore } = await import('../../src/stores/roomStore');
+      (useRoomStore as any).mockReturnValue({
+        rooms: roomsWithFull,
+        joinRoom: mockJoinRoom,
+        isLoading: false
+      });
+
+      render(<JoinRoomModal {...defaultProps} roomId="room-full" />);
       
       expect(screen.getByText('⚠️ 房间已满，无法加入')).toBeInTheDocument();
     });
@@ -347,8 +391,24 @@ describe('JoinRoomModal', () => {
   });
 
   describe('Button States', () => {
-    it('should disable join button for full room', () => {
-      render(<JoinRoomModal {...defaultProps} roomId="room-2" />);
+    it('should disable join button for full room', async () => {
+      // Create a full room
+      const fullRoom = { 
+        ...mockRooms[1], 
+        id: 'room-full-disabled',
+        currentPlayers: 4,
+        playerLimit: 4
+      };
+      const roomsWithFull = [...mockRooms, fullRoom];
+      
+      const { useRoomStore } = await import('../../src/stores/roomStore');
+      (useRoomStore as any).mockReturnValue({
+        rooms: roomsWithFull,
+        joinRoom: mockJoinRoom,
+        isLoading: false
+      });
+
+      render(<JoinRoomModal {...defaultProps} roomId="room-full-disabled" />);
       
       const joinButton = screen.getByRole('button', { name: '加入房间' });
       expect(joinButton).toBeDisabled();
@@ -485,7 +545,8 @@ describe('JoinRoomModal', () => {
       render(<JoinRoomModal {...defaultProps} roomId="room-2" />);
       
       const passwordInput = screen.getByPlaceholderText('请输入房间密码');
-      expect(passwordInput).toHaveAttribute('autoFocus');
+      // Check if the input has focus (autofocus effect)
+      expect(passwordInput).toHaveFocus();
     });
   });
 

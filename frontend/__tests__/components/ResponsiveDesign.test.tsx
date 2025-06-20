@@ -5,7 +5,7 @@ import LobbyPage from '../../src/pages/LobbyPage';
 import RoomList from '../../src/components/RoomList';
 import CreateRoomModal from '../../src/components/CreateRoomModal';
 import type { Room } from '../../src/services/api';
-import { createComponentTestSocketMock } from '../test-infrastructure/socketMockFactory';
+import { createComponentTestSocketMock } from '../helpers/mocks/useSocketMockFactory';
 
 // Mock all dependencies
 vi.mock('../../src/components/../stores/userStore', () => ({
