@@ -188,9 +188,19 @@ describe('WinnerAnimationSequence', () => {
   it('should call onSequenceComplete after all winners', () => {
     render(<WinnerAnimationSequence {...mockProps} />);
     
-    // Fast-forward through all winners
+    // Fast-forward through first winner (3.5 seconds)
     act(() => {
-      vi.advanceTimersByTime(7100); // 3.5 seconds per winner * 2 + buffer
+      vi.advanceTimersByTime(3500);
+    });
+    
+    // Fast-forward through second winner (another 3.5 seconds)
+    act(() => {
+      vi.advanceTimersByTime(3500);
+    });
+    
+    // Give a small buffer for the effect to run and call onSequenceComplete
+    act(() => {
+      vi.advanceTimersByTime(100);
     });
     
     expect(mockProps.onSequenceComplete).toHaveBeenCalledTimes(1);

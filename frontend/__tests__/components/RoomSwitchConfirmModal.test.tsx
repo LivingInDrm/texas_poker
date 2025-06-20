@@ -128,7 +128,8 @@ describe('RoomSwitchConfirmModal', () => {
   it('handles ESC key press', () => {
     render(<RoomSwitchConfirmModal {...defaultProps} />);
     
-    fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+    const backdrop = screen.getByTestId('modal-backdrop');
+    fireEvent.keyDown(backdrop, { key: 'Escape', code: 'Escape' });
     
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
@@ -142,8 +143,11 @@ describe('RoomSwitchConfirmModal', () => {
 
     render(<RoomSwitchConfirmModal {...propsWithLongIds} />);
     
-    expect(screen.getByText('当前房间: this-is-a-very-long-room-id-that-might-overflow')).toBeInTheDocument();
-    expect(screen.getByText('目标房间: another-very-long-room-id-for-testing')).toBeInTheDocument();
+    // Check for separate text elements since they are split into different spans
+    expect(screen.getByText('当前房间:')).toBeInTheDocument();
+    expect(screen.getByText('this-is-a-very-long-room-id-that-might-overflow')).toBeInTheDocument();
+    expect(screen.getByText('目标房间:')).toBeInTheDocument();
+    expect(screen.getByText('another-very-long-room-id-for-testing')).toBeInTheDocument();
   });
 
   it('displays correct button styles', () => {
