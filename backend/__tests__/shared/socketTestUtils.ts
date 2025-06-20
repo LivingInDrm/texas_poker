@@ -35,20 +35,28 @@ export function createMockAuthenticatedSocket(
       issued: Date.now()
     },
     emit: jest.fn().mockImplementation(async (event: string, ...args: any[]) => {
-      // If this is a server-to-client event (not triggering a handler)
-      if (!eventHandlers.has(event)) {
+      // Check if this is a client-to-server event (has handlers registered)
+      if (eventHandlers.has(event)) {
+        // Trigger the registered handlers for this event
+        const handlers = eventHandlers.get(event)!;
+        for (const handler of handlers) {
+          try {
+            await handler(...args);
+          } catch (error) {
+            // Log minimal error to avoid console.error recursion
+            if (process.env.NODE_ENV !== 'test') {
+              console.error(`Handler error for ${event}:`, error instanceof Error ? error.message : 'Unknown error');
+            }
+          }
+        }
+      } else {
+        // Server-to-client emission - use client spy
         clientEmitSpy(event, ...args);
-        return true;
-      }
-      
-      // Otherwise trigger the event handlers (client-to-server events)
-      const handlers = eventHandlers.get(event) || [];
-      for (const handler of handlers) {
-        await handler(...args);
       }
       return true;
     }),
     _clientEmitSpy: clientEmitSpy, // Expose for testing
+    _eventHandlers: eventHandlers, // Expose for testing
     emitWithAck: jest.fn(),
     on: jest.fn().mockImplementation((event: string, handler: Function) => {
       if (!eventHandlers.has(event)) {

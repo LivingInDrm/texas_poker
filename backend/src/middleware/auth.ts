@@ -22,6 +22,11 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; username: string };
     
+    // 验证JWT payload完整性
+    if (!decoded.userId || !decoded.username) {
+      return res.status(403).json({ error: 'Invalid token payload' });
+    }
+    
     // 验证用户是否仍然存在
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },

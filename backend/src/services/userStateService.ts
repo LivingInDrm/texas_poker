@@ -323,13 +323,16 @@ export class UserStateService {
 export const userStateService = UserStateService.getInstance();
 
 // 定期清理孤立状态（每5分钟执行一次）
-setInterval(async () => {
-  try {
-    const result = await userStateService.cleanupOrphanedUserStates();
-    if (result.cleaned > 0 || result.errors.length > 0) {
-      console.log('User state cleanup completed:', result);
+// 在非测试环境中启动定时器
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(async () => {
+    try {
+      const result = await userStateService.cleanupOrphanedUserStates();
+      if (result.cleaned > 0 || result.errors.length > 0) {
+        console.log('User state cleanup completed:', result);
+      }
+    } catch (error) {
+      console.error('Error during scheduled user state cleanup:', error);
     }
-  } catch (error) {
-    console.error('Error during scheduled user state cleanup:', error);
-  }
-}, 5 * 60 * 1000);
+  }, 5 * 60 * 1000);
+}
