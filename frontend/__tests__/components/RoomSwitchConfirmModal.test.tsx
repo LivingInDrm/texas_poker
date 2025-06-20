@@ -29,8 +29,10 @@ describe('RoomSwitchConfirmModal', () => {
     render(<RoomSwitchConfirmModal {...defaultProps} />);
     
     expect(screen.getByText('切换房间确认')).toBeInTheDocument();
-    expect(screen.getByText('当前房间: room-123')).toBeInTheDocument();
-    expect(screen.getByText('目标房间: room-456')).toBeInTheDocument();
+    expect(screen.getByText('当前房间:')).toBeInTheDocument();
+    expect(screen.getByText('room-123')).toBeInTheDocument();
+    expect(screen.getByText('目标房间:')).toBeInTheDocument();
+    expect(screen.getByText('room-456')).toBeInTheDocument();
     expect(screen.getByText('继续')).toBeInTheDocument();
     expect(screen.getByText('取消')).toBeInTheDocument();
   });
@@ -52,7 +54,8 @@ describe('RoomSwitchConfirmModal', () => {
 
     render(<RoomSwitchConfirmModal {...propsWithDetails} />);
     
-    expect(screen.getByText('当前房间玩家数: 3')).toBeInTheDocument();
+    expect(screen.getByText('当前房间玩家数:')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getByText('游戏进行中')).toBeInTheDocument();
   });
 
@@ -67,7 +70,8 @@ describe('RoomSwitchConfirmModal', () => {
 
     render(<RoomSwitchConfirmModal {...propsWithWaiting} />);
     
-    expect(screen.getByText('当前房间玩家数: 2')).toBeInTheDocument();
+    expect(screen.getByText('当前房间玩家数:')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('等待游戏开始')).toBeInTheDocument();
   });
 
