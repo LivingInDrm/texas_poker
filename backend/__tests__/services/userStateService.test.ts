@@ -10,9 +10,7 @@ const mockPrisma = MockFactory.createPrismaMock();
 jest.mock('../../src/db', () => ({
   redisClient: mockRedis
 }));
-jest.mock('../../src/prisma', () => ({
-  default: mockPrisma
-}));
+jest.mock('../../src/prisma', () => mockPrisma);
 
 // Import after mocking
 import { userStateService } from '../../src/services/userStateService';
