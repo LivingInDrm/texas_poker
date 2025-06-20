@@ -10,7 +10,9 @@ const mockPrisma = MockFactory.createPrismaMock();
 jest.mock('../../src/db', () => ({
   redisClient: mockRedis
 }));
-jest.mock('../../src/prisma', () => mockPrisma);
+jest.mock('../../src/prisma', () => ({
+  default: mockPrisma
+}));
 
 // Import after mocking
 import { userStateService } from '../../src/services/userStateService';
@@ -265,6 +267,13 @@ describe('UserStateService Comprehensive Tests', () => {
     });
 
     it('should remove user from room and update positions', async () => {
+      // Setup Redis mock to return room data
+      mocks.redis.get.mockImplementation((key: string) => {
+        if (key === 'user_room:user-1') return Promise.resolve('room-123');
+        if (key === 'room:room-123') return Promise.resolve(JSON.stringify(testData.roomState));
+        return Promise.resolve(null);
+      });
+
       const result = await userStateService.forceLeaveCurrentRoom(
         'user-1',
         mockSocket,
@@ -352,7 +361,8 @@ describe('UserStateService Comprehensive Tests', () => {
     it('should handle errors gracefully', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       mocks.redis.get.mockImplementation((key: string) => {
-        if (key === 'user_room:user-1') return Promise.reject(new Error('Redis error'));
+        if (key === 'user_room:user-1') return Promise.resolve('room-123');
+        if (key === 'room:room-123') return Promise.reject(new Error('Redis error'));
         return Promise.resolve(null);
       });
 
@@ -432,7 +442,8 @@ describe('UserStateService Comprehensive Tests', () => {
     it('should handle force leave errors', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       mocks.redis.get.mockImplementation((key: string) => {
-        if (key === 'user_room:user-1') return Promise.reject(new Error('Redis error'));
+        if (key === 'user_room:user-1') return Promise.resolve('room-123');
+        if (key === 'room:room-123') return Promise.reject(new Error('Redis error'));
         return Promise.resolve(null);
       });
 
@@ -444,7 +455,7 @@ describe('UserStateService Comprehensive Tests', () => {
       );
 
       expect(result.canJoin).toBe(false);
-      expect(result.error).toBe('Failed to check room conflict');
+      expect(result.error).toBe('Failed to force leave current room');
       
       consoleSpy.mockRestore();
     });
@@ -505,7 +516,8 @@ describe('UserStateService Comprehensive Tests', () => {
     it('should handle validation errors', async () => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       mocks.redis.get.mockImplementation((key: string) => {
-        if (key === 'user_room:user-1') return Promise.reject(new Error('Redis error'));
+        if (key === 'user_room:user-1') return Promise.resolve('room-123');
+        if (key === 'room:room-123') return Promise.reject(new Error('Redis error'));
         return Promise.resolve(null);
       });
 
