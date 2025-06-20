@@ -106,9 +106,14 @@ export class MockFactory {
    * 创建Socket.IO服务器Mock
    */
   static createIOMock() {
+    // Create a broadcast object that will be returned by to() calls
+    const broadcastObject = {
+      emit: jest.fn()
+    };
+    
     return {
       emit: jest.fn(),
-      to: jest.fn().mockReturnThis(),
+      to: jest.fn().mockReturnValue(broadcastObject),
       in: jest.fn().mockReturnThis(),
       use: jest.fn(),
       on: jest.fn(),
