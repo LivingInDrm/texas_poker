@@ -8,6 +8,7 @@ export interface ServerToClientEvents {
   'room:player_joined': (data: { player: RoomPlayer }) => void;
   'room:player_left': (data: { playerId: string }) => void;
   'room:state_update': (data: { roomState: RoomState }) => void;
+  'room:ready_state_changed': (data: { playerId: string; isReady: boolean; canStartGame: boolean }) => void;
   
   // 游戏相关事件
   'game:started': (data: { gameState: GameState }) => void;
@@ -32,6 +33,7 @@ export interface ClientToServerEvents {
   // 游戏相关事件
   'game:action': (data: { roomId: string; action: PlayerAction }, callback: (response: SocketResponse) => void) => void;
   'game:ready': (data: { roomId: string }, callback: (response: SocketResponse) => void) => void;
+  'game:start': (data: { roomId: string }, callback: (response: SocketResponse) => void) => void;
   'game:restart': (data: { roomId: string }, callback: (response: SocketResponse) => void) => void;
   
   // 系统相关事件
@@ -165,6 +167,7 @@ export const SOCKET_EVENTS = {
   ROOM_PLAYER_LEFT: 'room:player_left',
   ROOM_STATE_UPDATE: 'room:state_update',
   ROOM_QUICK_START: 'room:quick_start',
+  ROOM_READY_STATE_CHANGED: 'room:ready_state_changed',
   
   // 游戏相关
   GAME_STARTED: 'game:started',
@@ -175,6 +178,7 @@ export const SOCKET_EVENTS = {
   GAME_ENDED: 'game:ended',
   GAME_SYNC: 'game:sync',
   GAME_READY: 'game:ready',
+  GAME_START: 'game:start',
   GAME_RESTART: 'game:restart',
   
   // 系统相关

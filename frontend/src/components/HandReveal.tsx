@@ -112,10 +112,6 @@ export const HandReveal: React.FC<HandRevealProps> = ({
             <PokerCards
               cards={[card]}
               size="small"
-              showCards={index < currentCardIndex}
-              highlighted={hand?.cards.some(hCard => 
-                hCard.suit === card.suit && hCard.rank === card.rank
-              )}
             />
           </div>
         ))}

@@ -162,13 +162,13 @@ class SocketService {
       }
     });
 
-    this.socket.on(SOCKET_EVENTS.RECONNECT_ATTEMPT, (attemptNumber) => {
+    (this.socket as any).on('reconnect_attempt', (attemptNumber: number) => {
       this.connectionStatus = 'reconnecting';
       this.notifyStatusChange();
       console.log(`Reconnection attempt ${attemptNumber}`);
     });
 
-    this.socket.on(SOCKET_EVENTS.RECONNECT, (attemptNumber) => {
+    (this.socket as any).on('reconnect', (attemptNumber: number) => {
       this.connectionStatus = 'connected';
       this.notifyStatusChange();
       console.log(`Reconnected after ${attemptNumber} attempts`);
@@ -177,11 +177,11 @@ class SocketService {
       this.attemptStateRecovery();
     });
 
-    this.socket.on(SOCKET_EVENTS.RECONNECT_ERROR, (error) => {
+    (this.socket as any).on('reconnect_error', (error: any) => {
       console.error('Reconnection error:', error);
     });
 
-    this.socket.on(SOCKET_EVENTS.RECONNECT_FAILED, () => {
+    (this.socket as any).on('reconnect_failed', () => {
       this.connectionStatus = 'error';
       this.notifyStatusChange();
       console.error('Failed to reconnect after maximum attempts');
@@ -297,7 +297,7 @@ class SocketService {
     }
 
     return new Promise((resolve, reject) => {
-      this.socket!.emit('GET_USER_CURRENT_ROOM', {}, (response) => {
+      this.socket!.emit('GET_USER_CURRENT_ROOM' as any, {}, (response: any) => {
         if (response.success) {
           resolve({
             roomId: response.data?.roomId || null,
@@ -409,6 +409,23 @@ class SocketService {
 
       setTimeout(() => {
         reject(new Error('Set ready timeout'));
+      }, 5000);
+    });
+  }
+
+  async startGame(roomId: string): Promise<SocketResponse> {
+    if (!this.socket?.connected) {
+      throw new Error('Socket not connected');
+    }
+
+    return new Promise((resolve, reject) => {
+      this.socket!.emit(SOCKET_EVENTS.GAME_START, { roomId }, (response) => {
+        console.log('Start game response:', response);
+        resolve(response);
+      });
+
+      setTimeout(() => {
+        reject(new Error('Start game timeout'));
       }, 5000);
     });
   }

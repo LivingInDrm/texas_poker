@@ -290,14 +290,17 @@ exports.UserStateService = UserStateService;
 // 导出单例实例
 exports.userStateService = UserStateService.getInstance();
 // 定期清理孤立状态（每5分钟执行一次）
-setInterval(() => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const result = yield exports.userStateService.cleanupOrphanedUserStates();
-        if (result.cleaned > 0 || result.errors.length > 0) {
-            console.log('User state cleanup completed:', result);
+// 在非测试环境中启动定时器
+if (process.env.NODE_ENV !== 'test') {
+    setInterval(() => __awaiter(void 0, void 0, void 0, function* () {
+        try {
+            const result = yield exports.userStateService.cleanupOrphanedUserStates();
+            if (result.cleaned > 0 || result.errors.length > 0) {
+                console.log('User state cleanup completed:', result);
+            }
         }
-    }
-    catch (error) {
-        console.error('Error during scheduled user state cleanup:', error);
-    }
-}), 5 * 60 * 1000);
+        catch (error) {
+            console.error('Error during scheduled user state cleanup:', error);
+        }
+    }), 5 * 60 * 1000);
+}

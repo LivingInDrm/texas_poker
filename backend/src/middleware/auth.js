@@ -24,6 +24,10 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
     }
     try {
         const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+        // 验证JWT payload完整性
+        if (!decoded.userId || !decoded.username) {
+            return res.status(403).json({ error: 'Invalid token payload' });
+        }
         // 验证用户是否仍然存在
         const user = yield prisma_1.default.user.findUnique({
             where: { id: decoded.userId },

@@ -27,6 +27,7 @@ interface UseSocketReturn {
   quickStart: () => Promise<any>;
   makeGameAction: (action: PlayerAction) => Promise<any>;
   setReady: () => Promise<any>;
+  startGame: () => Promise<any>;
   restartGame: () => Promise<any>;
   getCurrentRoomStatus: () => Promise<{
     roomId: string | null;
@@ -158,6 +159,20 @@ export function useSocket(): UseSocketReturn {
       return response;
     } catch (error) {
       console.error('Failed to set ready:', error);
+      throw error;
+    }
+  }, []);
+
+  const startGame = useCallback(async () => {
+    if (!socketService.roomId) {
+      throw new Error('Not in a room');
+    }
+
+    try {
+      const response = await socketService.startGame(socketService.roomId);
+      return response;
+    } catch (error) {
+      console.error('Failed to start game:', error);
       throw error;
     }
   }, []);
@@ -345,6 +360,7 @@ export function useSocket(): UseSocketReturn {
     quickStart,
     makeGameAction,
     setReady,
+    startGame,
     restartGame,
     getCurrentRoomStatus,
     leaveCurrentRoom,

@@ -15,6 +15,7 @@ exports.SOCKET_EVENTS = {
     ROOM_PLAYER_LEFT: 'room:player_left',
     ROOM_STATE_UPDATE: 'room:state_update',
     ROOM_QUICK_START: 'room:quick_start',
+    ROOM_READY_STATE_CHANGED: 'room:ready_state_changed',
     // 游戏相关
     GAME_STARTED: 'game:started',
     GAME_ACTION: 'game:action',
@@ -24,6 +25,7 @@ exports.SOCKET_EVENTS = {
     GAME_ENDED: 'game:ended',
     GAME_SYNC: 'game:sync',
     GAME_READY: 'game:ready',
+    GAME_START: 'game:start',
     GAME_RESTART: 'game:restart',
     // 系统相关
     ERROR: 'error',

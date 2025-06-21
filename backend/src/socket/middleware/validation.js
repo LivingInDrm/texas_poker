@@ -284,7 +284,9 @@ class ValidationMiddleware {
 exports.ValidationMiddleware = ValidationMiddleware;
 // 创建全局验证实例
 exports.validationMiddleware = new ValidationMiddleware();
-// 定期清理过期计数器
-setInterval(() => {
-    exports.validationMiddleware.cleanup();
-}, 60000); // 每分钟清理一次
+// 定期清理过期计数器 - 只在非测试环境运行
+if (process.env.NODE_ENV !== 'test') {
+    setInterval(() => {
+        exports.validationMiddleware.cleanup();
+    }, 60000); // 每分钟清理一次
+}

@@ -18,8 +18,19 @@ const db_1 = require("../../db");
 const prisma_1 = __importDefault(require("../../prisma"));
 const GameState_1 = require("../../game/GameState");
 const validation_1 = require("../middleware/validation");
+// 检查游戏开始条件
+function checkGameStartConditions(roomState) {
+    // 至少需要2名玩家
+    if (roomState.players.length < 2) {
+        return false;
+    }
+    // 所有非房主玩家必须已准备，房主无需准备状态
+    const nonOwnerPlayers = roomState.players.filter(p => p.id !== roomState.ownerId);
+    const allNonOwnersReady = nonOwnerPlayers.every(p => p.isReady && p.isConnected);
+    return allNonOwnersReady;
+}
 function setupGameHandlers(socket, io) {
-    // 玩家准备
+    // 玩家准备状态切换
     socket.on(socket_1.SOCKET_EVENTS.GAME_READY, (data, callback) => __awaiter(this, void 0, void 0, function* () {
         const { roomId } = data;
         const { userId, username } = socket.data;
@@ -45,63 +56,117 @@ function setupGameHandlers(socket, io) {
             }
             // 切换准备状态
             roomState.players[playerIndex].isReady = !roomState.players[playerIndex].isReady;
-            // 检查是否所有玩家都准备好了
-            const allReady = roomState.players.length >= 2 &&
-                roomState.players.every(p => p.isReady && p.isConnected);
-            if (allReady && !roomState.gameStarted) {
-                // 开始游戏
-                const gameEngine = new GameState_1.GameState(roomId);
-                // 添加玩家到游戏引擎
-                for (const player of roomState.players) {
-                    gameEngine.addPlayer(player.id, player.username, player.chips);
-                    gameEngine.setPlayerReady(player.id, true);
-                }
-                // 开始新一手牌
-                const gameStarted = gameEngine.startNewHand();
-                if (!gameStarted) {
-                    return callback({
-                        success: false,
-                        error: 'Failed to start game',
-                        message: 'Could not start new hand'
-                    });
-                }
-                // 转换游戏状态为WebSocket格式
-                const gameState = convertGameEngineToWebSocketState(gameEngine, roomId);
-                roomState.gameStarted = true;
-                roomState.status = 'PLAYING';
-                roomState.gameState = gameState;
-                // 保存房间状态
-                yield db_1.redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
-                // 通知所有玩家游戏开始
-                io.to(roomId).emit(socket_1.SOCKET_EVENTS.GAME_STARTED, { gameState });
-                // 通知当前玩家需要行动
-                const currentPlayerId = gameEngine.getCurrentPlayerId();
-                const currentPlayer = currentPlayerId ? roomState.players.find(p => p.id === currentPlayerId) : null;
-                if (currentPlayer) {
-                    const validActions = gameEngine.getValidActions(currentPlayerId);
-                    io.to(roomId).emit(socket_1.SOCKET_EVENTS.GAME_ACTION_REQUIRED, {
-                        playerId: currentPlayerId,
-                        timeout: gameState.timeout,
-                        validActions
-                    });
-                }
-                console.log(`Game started in room ${roomId}`);
-            }
-            else {
-                // 保存房间状态
-                yield db_1.redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
-            }
+            // 检查游戏开始条件
+            const canStartGame = checkGameStartConditions(roomState);
+            // 保存房间状态
+            yield db_1.redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
             // 发送响应
             callback({
                 success: true,
                 message: roomState.players[playerIndex].isReady ? 'Ready for game' : 'Not ready',
                 data: { isReady: roomState.players[playerIndex].isReady }
             });
+            // 广播准备状态变化
+            io.to(roomId).emit(socket_1.SOCKET_EVENTS.ROOM_READY_STATE_CHANGED, {
+                playerId: userId,
+                isReady: roomState.players[playerIndex].isReady,
+                canStartGame
+            });
             // 广播房间状态更新
             io.to(roomId).emit(socket_1.SOCKET_EVENTS.ROOM_STATE_UPDATE, { roomState });
         }
         catch (error) {
             console.error('Error handling game ready:', error);
+            callback({
+                success: false,
+                error: 'Internal server error',
+                message: socket_1.SOCKET_ERRORS.INTERNAL_ERROR
+            });
+        }
+    }));
+    // 房主开始游戏
+    socket.on(socket_1.SOCKET_EVENTS.GAME_START, (data, callback) => __awaiter(this, void 0, void 0, function* () {
+        const { roomId } = data;
+        const { userId, username } = socket.data;
+        try {
+            // 获取房间状态
+            const roomData = yield db_1.redisClient.get(`room:${roomId}`);
+            if (!roomData) {
+                return callback({
+                    success: false,
+                    error: 'Room not found',
+                    message: socket_1.SOCKET_ERRORS.ROOM_NOT_FOUND
+                });
+            }
+            const roomState = JSON.parse(roomData.toString());
+            // 检查是否是房主
+            if (roomState.ownerId !== userId) {
+                return callback({
+                    success: false,
+                    error: 'Only room owner can start game',
+                    message: 'Permission denied'
+                });
+            }
+            // 检查游戏开始条件
+            if (!checkGameStartConditions(roomState)) {
+                return callback({
+                    success: false,
+                    error: 'Game start conditions not met',
+                    message: 'Need at least 2 players and all non-owners must be ready'
+                });
+            }
+            if (roomState.gameStarted) {
+                return callback({
+                    success: false,
+                    error: 'Game already started',
+                    message: 'Game is already in progress'
+                });
+            }
+            // 开始游戏
+            const gameEngine = new GameState_1.GameState(roomId);
+            // 添加玩家到游戏引擎
+            for (const player of roomState.players) {
+                gameEngine.addPlayer(player.id, player.username, player.chips);
+                gameEngine.setPlayerReady(player.id, true);
+            }
+            // 开始新一手牌
+            const gameStarted = gameEngine.startNewHand();
+            if (!gameStarted) {
+                return callback({
+                    success: false,
+                    error: 'Failed to start game',
+                    message: 'Could not start new hand'
+                });
+            }
+            // 转换游戏状态为WebSocket格式
+            const gameState = convertGameEngineToWebSocketState(gameEngine, roomId);
+            roomState.gameStarted = true;
+            roomState.status = 'PLAYING';
+            roomState.gameState = gameState;
+            // 保存房间状态
+            yield db_1.redisClient.setEx(`room:${roomId}`, 3600, JSON.stringify(roomState));
+            // 发送成功响应
+            callback({
+                success: true,
+                message: 'Game started successfully'
+            });
+            // 通知所有玩家游戏开始
+            io.to(roomId).emit(socket_1.SOCKET_EVENTS.GAME_STARTED, { gameState });
+            // 通知当前玩家需要行动
+            const currentPlayerId = gameEngine.getCurrentPlayerId();
+            const currentPlayer = currentPlayerId ? roomState.players.find(p => p.id === currentPlayerId) : null;
+            if (currentPlayer) {
+                const validActions = gameEngine.getValidActions(currentPlayerId);
+                io.to(roomId).emit(socket_1.SOCKET_EVENTS.GAME_ACTION_REQUIRED, {
+                    playerId: currentPlayerId,
+                    timeout: gameState.timeout,
+                    validActions
+                });
+            }
+            console.log(`Game manually started by ${username} in room ${roomId}`);
+        }
+        catch (error) {
+            console.error('Error starting game:', error);
             callback({
                 success: false,
                 error: 'Internal server error',

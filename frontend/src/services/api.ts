@@ -53,6 +53,7 @@ export interface User {
   id: string;
   username: string;
   avatar?: string;
+  chips?: number;
   createdAt: string;
   updatedAt?: string;
 }

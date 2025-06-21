@@ -33,6 +33,7 @@ export interface ClientToServerEvents {
   // 游戏相关事件
   'game:action': (data: { roomId: string; action: PlayerAction }, callback: (response: SocketResponse) => void) => void;
   'game:ready': (data: { roomId: string }, callback: (response: SocketResponse) => void) => void;
+  'game:start': (data: { roomId: string }, callback: (response: SocketResponse) => void) => void;
   'game:restart': (data: { roomId: string }, callback: (response: SocketResponse) => void) => void;
   
   // 系统相关事件
@@ -178,6 +179,7 @@ export const SOCKET_EVENTS = {
   GAME_ENDED: 'game:ended',
   GAME_SYNC: 'game:sync',
   GAME_READY: 'game:ready',
+  GAME_START: 'game:start',
   GAME_RESTART: 'game:restart',
   
   // 系统相关
