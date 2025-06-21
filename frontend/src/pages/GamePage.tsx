@@ -438,6 +438,17 @@ const GamePage: React.FC = () => {
             <div className="text-sm opacity-75">
               {currentRoom.gameStarted ? '游戏正在加载...' : '等待游戏开始'}
             </div>
+
+            {/* 调试信息 - 开发环境显示 */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mt-4 p-2 bg-black bg-opacity-30 rounded text-xs text-left">
+                <div>GameStarted: {currentRoom.gameStarted ? 'Yes' : 'No'}</div>
+                <div>IsInGame: {isInGame ? 'Yes' : 'No'}</div>
+                <div>GameSnapshot: {gameSnapshot ? 'Available' : 'None'}</div>
+                <div>GameState: {gameState ? 'Available' : 'None'}</div>
+                <div>Room Status: {currentRoom.status}</div>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
@@ -452,8 +463,8 @@ const GamePage: React.FC = () => {
         />
       )}
 
-      {/* 游戏控制按钮 */}
-      {currentRoom && !isInGame && (
+      {/* 游戏控制按钮 - 只在游戏未开始且没有游戏快照时显示 */}
+      {currentRoom && !gameSnapshot && !isInGame && (
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
           <div className="flex space-x-4">
             {/* 准备按钮 (非房主显示) */}
