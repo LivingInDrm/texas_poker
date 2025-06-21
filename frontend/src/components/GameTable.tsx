@@ -19,6 +19,15 @@ const GameTable: React.FC<GameTableProps> = ({
 }) => {
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
 
+  console.log('🎮 GameTable: Rendering with snapshot:', {
+    gameId: gameSnapshot.gameId,
+    phase: gameSnapshot.phase,
+    phaseString: JSON.stringify(gameSnapshot.phase),
+    playersCount: gameSnapshot.players.length,
+    currentUserId,
+    isWaiting: gameSnapshot.phase === GamePhase.WAITING
+  });
+
   // 计算当前玩家的操作倒计时
   useEffect(() => {
     if (!gameSnapshot.currentPlayerId) {

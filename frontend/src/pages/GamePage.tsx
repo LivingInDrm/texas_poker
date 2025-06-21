@@ -388,12 +388,17 @@ const GamePage: React.FC = () => {
 
       {/* 游戏桌面 */}
       {gameSnapshot ? (
-        <GameTable
-          gameSnapshot={gameSnapshot}
-          currentUserId={user?.id || ''}
-          onPlayerAction={handlePlayerAction}
-          className="h-screen"
-        />
+        <>
+          <div className="absolute top-16 left-4 bg-blue-500 text-white p-2 rounded z-50 text-xs">
+            🎮 Rendering GameTable - Players: {gameSnapshot.players.length}
+          </div>
+          <GameTable
+            gameSnapshot={gameSnapshot}
+            currentUserId={user?.id || ''}
+            onPlayerAction={handlePlayerAction}
+            className="h-screen"
+          />
+        </>
       ) : currentRoom ? (
         /* 房间存在但没有游戏快照时显示房间信息 */
         <div className="flex items-center justify-center h-screen">
@@ -590,13 +595,17 @@ const GamePage: React.FC = () => {
 function convertSocketPhaseToLocal(phase: string): GamePhase {
   switch (phase) {
     case 'waiting': return GamePhase.WAITING;
-    case 'preflop': return GamePhase.PRE_FLOP;
+    case 'pre_flop': return GamePhase.PRE_FLOP;  // 修复：后端使用 'pre_flop'
+    case 'preflop': return GamePhase.PRE_FLOP;   // 保持向下兼容
     case 'flop': return GamePhase.FLOP;
     case 'turn': return GamePhase.TURN;
     case 'river': return GamePhase.RIVER;
     case 'showdown': return GamePhase.SHOWDOWN;
     case 'ended': return GamePhase.FINISHED;
-    default: return GamePhase.WAITING;
+    case 'finished': return GamePhase.FINISHED;  // 后端可能使用 'finished'
+    default: 
+      console.warn('Unknown game phase:', phase);
+      return GamePhase.WAITING;
   }
 }
 
