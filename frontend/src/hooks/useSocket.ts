@@ -251,8 +251,15 @@ export function useSocket(): UseSocketReturn {
 
     // 游戏事件监听
     socketService.on(SOCKET_EVENTS.GAME_STARTED, (data: { gameState: GameState }) => {
+      console.log('🎮 GAME_STARTED event received:', {
+        gameId: data.gameState.gameId,
+        phase: data.gameState.phase,
+        playersCount: data.gameState.players.length,
+        currentPlayerIndex: data.gameState.currentPlayerIndex,
+        dealerIndex: data.gameState.dealerIndex
+      });
       setGameState(data.gameState);
-      console.log('Game started');
+      console.log('Game started - state updated');
     });
 
     socketService.on(SOCKET_EVENTS.GAME_ACTION_REQUIRED, (data: { playerId: string; timeout: number; validActions: string[] }) => {

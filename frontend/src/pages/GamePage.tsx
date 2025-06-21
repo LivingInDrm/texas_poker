@@ -107,6 +107,13 @@ const GamePage: React.FC = () => {
 
   // 将Socket游戏状态转换为本地GameSnapshot格式
   useEffect(() => {
+    console.log('🎯 GamePage: Game state effect triggered:', {
+      hasGameState: !!gameState,
+      hasCurrentRoom: !!currentRoom,
+      gameId: gameState?.gameId,
+      phase: gameState?.phase
+    });
+    
     if (!gameState || !currentRoom) {
       setGameSnapshot(null);
       return;
@@ -161,6 +168,13 @@ const GamePage: React.FC = () => {
       }))
     };
 
+    console.log('🎯 GamePage: Created game snapshot:', {
+      gameId: snapshot.gameId,
+      phase: snapshot.phase,
+      playersCount: snapshot.players.length,
+      currentPlayerId: snapshot.currentPlayerId
+    });
+    
     setGameSnapshot(snapshot);
   }, [gameState, currentRoom]);
 
@@ -208,8 +222,10 @@ const GamePage: React.FC = () => {
   const handleStartGame = async () => {
     if (!roomId) return;
 
+    console.log('🚀 GamePage: Starting game for room:', roomId);
     try {
       const response = await startGame();
+      console.log('🚀 GamePage: Start game response:', response);
       if (!response.success) {
         setError(response.error || '开始游戏失败');
       }

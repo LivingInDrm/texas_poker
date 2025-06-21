@@ -66,6 +66,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   setGameState: (gameState: GameState | null) => {
     if (!gameState) {
+      console.log('🗂️ GameStore: Clearing game state');
       set({
         gameState: null,
         isInGame: false,
@@ -76,6 +77,14 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     }
 
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    
+    console.log('🗂️ GameStore: Setting game state:', {
+      gameId: gameState.gameId,
+      phase: gameState.phase,
+      playersCount: gameState.players.length,
+      currentPlayerId: currentPlayer?.id,
+      isInGame: true
+    });
     
     set({
       gameState,
