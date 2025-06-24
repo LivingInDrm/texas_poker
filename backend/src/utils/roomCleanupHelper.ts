@@ -106,8 +106,8 @@ export class RoomCleanupHelper {
       if (room) {
         room.forEach(socketId => {
           const socket = this.io.sockets.sockets.get(socketId);
-          if (socket && (socket as any).data?.userId) {
-            userIds.push((socket as any).data.userId);
+          if (socket && socket.data?.userId) {
+            userIds.push(socket.data.userId);
           }
         });
       }
@@ -144,8 +144,8 @@ export class RoomCleanupHelper {
             socket.leave(roomId);
             
             // 清理socket上的房间信息
-            if ((socket as any).data) {
-              (socket as any).data.roomId = undefined;
+            if (socket.data) {
+              socket.data.roomId = undefined;
             }
           }
         });

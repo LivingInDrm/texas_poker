@@ -156,6 +156,7 @@ export class RoomStateFactory {
       smallBlindIndex: 1,
       bigBlindIndex: 2,
       currentPlayerIndex: 0,
+      currentPlayerId: null,
       board: [],
       pot: 30,
       sidePots: [],
