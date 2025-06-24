@@ -257,7 +257,7 @@ export function setupGameHandlers(
       // 验证玩家是否处于活跃状态
       const engineSnapshot = gameEngine.getGameSnapshot();
       const currentPlayer = engineSnapshot.players.find((p: any) => p.id === userId);
-      if (!currentPlayer || currentPlayer.status !== 'active') {
+      if (!currentPlayer || !currentPlayer.status || currentPlayer.status.toLowerCase() !== 'active') {
         return callback({
           success: false,
           error: 'Player not in active state',
@@ -510,18 +510,28 @@ function reconstructGameEngine(gameState: GameState): GameEngine {
     gameEngine.setPlayerReady(player.id, true);
   }
 
-  // 从保存的游戏状态恢复引擎状态
-  const engineSnapshot = gameEngine.getGameSnapshot();
-  const restoreData = {
-    phase: gameState.phase,
-    currentPlayerId: gameState.currentPlayerId,
-    players: gameState.players,
-    isHandInProgress: gameState.phase !== 'waiting',
-    handStartTime: Date.now(),
-    actionHistory: gameState.history || []
-  };
-  
-  gameEngine.restoreFromSnapshot(restoreData);
+  // 如果游戏已经开始，启动新一手牌来激活游戏引擎
+  if (gameState.phase !== 'waiting') {
+    gameEngine.startNewHand();
+  }
+
+  // 尝试恢复状态，如果失败则使用基本的重建
+  try {
+    const restoreData = {
+      phase: gameState.phase,
+      currentPlayerId: gameState.currentPlayerId,
+      players: gameState.players,
+      isHandInProgress: gameState.phase !== 'waiting',
+      handStartTime: Date.now(),
+      actionHistory: gameState.history || []
+    };
+    
+    if (typeof gameEngine.restoreFromSnapshot === 'function') {
+      gameEngine.restoreFromSnapshot(restoreData);
+    }
+  } catch (error) {
+    console.warn('Failed to restore game state from snapshot, using basic reconstruction:', error);
+  }
   
   return gameEngine;
 }
