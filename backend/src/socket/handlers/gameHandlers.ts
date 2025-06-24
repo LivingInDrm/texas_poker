@@ -444,7 +444,9 @@ function convertGameEngineToWebSocketState(gameEngine: GameEngine, roomId: strin
     dealerIndex: 0, // 默认庄家位置
     smallBlindIndex: 0, // 小盲位置
     bigBlindIndex: 1, // 大盲位置
-    currentPlayerIndex: 0, // 当前玩家索引
+    currentPlayerIndex: gameEngine.getCurrentPlayerId() ? 
+      engineState.players.findIndex((p: any) => p.id === gameEngine.getCurrentPlayerId()) : -1,
+    currentPlayerId: gameEngine.getCurrentPlayerId(),
     board: engineState.communityCards.map((card: any) => card.toString()),
     pot: engineState.pots.reduce((total: number, pot: any) => total + pot.amount, 0),
     sidePots: engineState.pots.map((pot: any) => ({

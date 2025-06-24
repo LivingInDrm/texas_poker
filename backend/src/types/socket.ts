@@ -94,6 +94,7 @@ export interface GameState {
   smallBlindIndex: number;
   bigBlindIndex: number;
   currentPlayerIndex: number;
+  currentPlayerId: string | null;
   board: string[];
   pot: number;
   sidePots: SidePot[];
