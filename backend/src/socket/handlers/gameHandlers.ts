@@ -246,12 +246,22 @@ export function setupGameHandlers(
       
       // 验证是否轮到该玩家
       const currentPlayerId = gameEngine.getCurrentPlayerId();
-      const currentPlayer = currentPlayerId ? gameEngine.getGameSnapshot().players.find((p: any) => p.id === currentPlayerId) : null;
-      if (!currentPlayer || currentPlayer.id !== userId) {
+      if (!currentPlayerId || currentPlayerId !== userId) {
         return callback({
           success: false,
           error: 'Not your turn',
           message: SOCKET_ERRORS.NOT_PLAYER_TURN
+        });
+      }
+
+      // 验证玩家是否处于活跃状态
+      const engineSnapshot = gameEngine.getGameSnapshot();
+      const currentPlayer = engineSnapshot.players.find((p: any) => p.id === userId);
+      if (!currentPlayer || currentPlayer.status !== 'active') {
+        return callback({
+          success: false,
+          error: 'Player not in active state',
+          message: SOCKET_ERRORS.INVALID_ACTION
         });
       }
 

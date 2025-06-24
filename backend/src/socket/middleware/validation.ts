@@ -59,11 +59,20 @@ export class ValidationMiddleware {
     }
 
     // 5. 验证是否轮到该玩家
-    const currentPlayer = roomState.gameState.players[roomState.gameState.currentPlayerIndex];
-    if (!currentPlayer || currentPlayer.id !== userId) {
+    const currentPlayerId = roomState.gameState.currentPlayerId;
+    if (!currentPlayerId || currentPlayerId !== userId) {
       return {
         valid: false,
         error: SOCKET_ERRORS.NOT_PLAYER_TURN
+      };
+    }
+
+    // 查找当前玩家信息
+    const currentPlayer = roomState.gameState.players.find((p: any) => p.id === userId);
+    if (!currentPlayer) {
+      return {
+        valid: false,
+        error: SOCKET_ERRORS.PLAYER_NOT_IN_ROOM
       };
     }
 
