@@ -9,6 +9,9 @@ import userRoutes from './routes/user';
 import roomRoutes from './routes/room';
 import adminRoutes from './routes/admin';
 import { createSocketServer } from './socket/socketServer';
+import { roomCleanupService } from './services/roomCleanupService';
+import { roomScannerService } from './services/roomScannerService';
+import { roomCleanupHelper } from './utils/roomCleanupHelper';
 
 dotenv.config();
 
@@ -132,6 +135,50 @@ app.get('/api/test/prisma', async (req, res) => {
   }
 });
 
+// 房间清理状态监控端点
+app.get('/api/admin/room-cleanup-status', async (req, res) => {
+  try {
+    const cleanupStatus = roomCleanupService.getStatus();
+    const roomStats = await roomScannerService.getRoomStatistics();
+    
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      cleanup: cleanupStatus,
+      roomStats,
+      helper: {
+        ready: roomCleanupHelper.isReady()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get room cleanup status',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// 手动触发房间扫描端点
+app.post('/api/admin/scan-rooms', async (req, res) => {
+  try {
+    const scanResult = await roomScannerService.scanAndCleanupEmptyRooms();
+    
+    res.json({
+      status: 'ok',
+      message: 'Room scan completed',
+      timestamp: new Date().toISOString(),
+      result: scanResult
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to scan rooms',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 const startServer = async () => {
   try {
     await connectDatabases();
@@ -140,10 +187,34 @@ const startServer = async () => {
     const io = createSocketServer(httpServer);
     console.log('🔌 Socket.IO server initialized');
     
+    // 设置房间清理助手的Socket.IO实例
+    roomCleanupHelper.setSocketIOInstance(io);
+    console.log('🧹 Room cleanup helper initialized');
+    
+    // 执行初始房间扫描和清理
+    console.log('🔍 Starting initial room scan...');
+    const scanResult = await roomScannerService.scanAndCleanupEmptyRooms();
+    console.log('📊 Initial room scan completed:', {
+      scanned: scanResult.scanned,
+      emptyRooms: scanResult.emptyRooms,
+      cleaned: scanResult.cleaned,
+      errors: scanResult.errors.length
+    });
+    
+    if (scanResult.errors.length > 0) {
+      console.warn('⚠️ Room scan errors:', scanResult.errors);
+    }
+    
+    // 获取房间清理服务状态
+    const cleanupStatus = roomCleanupService.getStatus();
+    console.log('🏠 Room cleanup service status:', cleanupStatus);
+    
     httpServer.listen(PORT, () => {
       console.log(`🃏 Texas Poker Server running on port ${PORT}`);
       console.log(`🌐 HTTP server: http://localhost:${PORT}`);
       console.log(`⚡ WebSocket server: ws://localhost:${PORT}`);
+      console.log(`🧹 Room cleanup enabled: ${cleanupStatus.enabled}`);
+      console.log(`⏱️ Room cleanup delay: ${cleanupStatus.cleanupDelayMs}ms`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

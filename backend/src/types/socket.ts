@@ -9,6 +9,8 @@ export interface ServerToClientEvents {
   'room:player_left': (data: { playerId: string }) => void;
   'room:state_update': (data: { roomState: RoomState }) => void;
   'room:ready_state_changed': (data: { playerId: string; isReady: boolean; canStartGame: boolean }) => void;
+  'room:destroyed': (data: { roomId: string; reason: string }) => void;
+  'room:cleanup_warning': (data: { roomId: string; timeLeft: number }) => void;
   
   // 游戏相关事件
   'game:started': (data: { gameState: GameState }) => void;
@@ -168,6 +170,8 @@ export const SOCKET_EVENTS = {
   ROOM_STATE_UPDATE: 'room:state_update',
   ROOM_QUICK_START: 'room:quick_start',
   ROOM_READY_STATE_CHANGED: 'room:ready_state_changed',
+  ROOM_DESTROYED: 'room:destroyed',
+  ROOM_CLEANUP_WARNING: 'room:cleanup_warning',
   
   // 游戏相关
   GAME_STARTED: 'game:started',

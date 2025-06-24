@@ -16,6 +16,7 @@ import { redisClient } from '../../db';
 import prisma from '../../prisma';
 import { validationMiddleware } from '../middleware/validation';
 import { userStateService } from '../../services/userStateService';
+import { roomCleanupService } from '../../services/roomCleanupService';
 
 export function setupRoomHandlers(
   socket: AuthenticatedSocket,
@@ -106,7 +107,9 @@ export function setupRoomHandlers(
       const existingPlayerIndex = roomState.players.findIndex(p => p.id === userId);
       
       if (existingPlayerIndex !== -1) {
-        // 玩家重新连接
+        // 玩家重新连接，取消可能的房间清理
+        roomCleanupService.cancelRoomCleanup(roomId);
+        
         roomState.players[existingPlayerIndex].isConnected = true;
         await socket.join(roomId);
         socket.data.roomId = roomId;
@@ -168,6 +171,9 @@ export function setupRoomHandlers(
         isConnected: true
       };
 
+      // 有新用户加入，取消可能的房间清理
+      roomCleanupService.cancelRoomCleanup(roomId);
+      
       // 加入房间
       await socket.join(roomId);
       socket.data.roomId = roomId;
@@ -256,15 +262,10 @@ export function setupRoomHandlers(
         player.position = index;
       });
 
-      // 如果房间为空，删除房间状态
+      // 如果房间为空，安排房间清理
       if (roomState.players.length === 0) {
-        await redisClient.del(`room:${roomId}`);
-        
-        // 如果房间在数据库中且没有正在进行的游戏，可以考虑删除
-        const room = await prisma.room.findUnique({ where: { id: roomId } });
-        if (room && room.status === 'WAITING') {
-          await prisma.room.delete({ where: { id: roomId } });
-        }
+        console.log(`Room ${roomId} is now empty, scheduling cleanup`);
+        await roomCleanupService.scheduleRoomCleanup(roomId);
       } else {
         // 如果离开的是房主，转移房主权限给第一个玩家
         if (roomState.ownerId === userId && roomState.players.length > 0) {
@@ -441,6 +442,9 @@ export function setupRoomHandlers(
         });
       }
 
+      // 有用户快速开始加入房间，取消可能的房间清理
+      roomCleanupService.cancelRoomCleanup(targetRoom.id);
+      
       // 加入socket房间
       await socket.join(targetRoom.id);
       socket.data.roomId = targetRoom.id;

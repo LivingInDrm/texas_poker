@@ -14,6 +14,7 @@ import { setupRoomHandlers } from './handlers/roomHandlers';
 import { setupGameHandlers } from './handlers/gameHandlers';
 import { setupSystemHandlers } from './handlers/systemHandlers';
 import { userStateService } from '../services/userStateService';
+import { roomCleanupService } from '../services/roomCleanupService';
 import prisma from '../prisma';
 
 // 创建Socket.IO服务器
@@ -148,6 +149,13 @@ async function handlePlayerDisconnect(
         });
         
         console.log(`Player ${socket.data.username} disconnected from room ${roomId}`);
+        
+        // 检查房间是否需要安排清理
+        const onlineUsersCount = roomState.players.filter((p: any) => p.isConnected).length;
+        if (onlineUsersCount === 0) {
+          console.log(`Room ${roomId} has no online users, scheduling cleanup`);
+          await roomCleanupService.scheduleRoomCleanup(roomId);
+        }
         
         // 注意：我们不立即清除全局用户状态，因为用户可能会重连
         // 全局用户状态会在用户明确离开房间或重连超时后清除
