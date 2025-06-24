@@ -155,7 +155,7 @@ const GamePage: React.FC = () => {
         playerId: action.playerId,
         action: convertSocketActionToLocal(action.action.type),
         amount: action.action.amount || 0,
-        timestamp: action.timestamp.getTime(),
+        timestamp: typeof action.timestamp === 'number' ? action.timestamp : action.timestamp.getTime(),
         phase: convertSocketPhaseToLocal(action.phase)
       })),
       isHandInProgress: gameState.phase !== 'ended',
