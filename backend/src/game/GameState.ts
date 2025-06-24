@@ -750,6 +750,88 @@ export class GameState {
   }
 
   /**
+   * 从保存的状态恢复游戏状态
+   */
+  restoreFromSnapshot(savedState: any): void {
+    // 恢复基本游戏状态
+    this.phase = this.convertStringToGamePhase(savedState.phase);
+    // Note: Community cards restoration from string representation not implemented yet
+    // Keep existing community cards
+    this.communityCards = this.communityCards || [];
+    this.actionHistory = savedState.actionHistory || [];
+    this.isHandInProgress = savedState.isHandInProgress || false;
+    this.handStartTime = savedState.handStartTime || 0;
+
+    // 恢复玩家状态
+    if (savedState.players && Array.isArray(savedState.players)) {
+      for (const playerData of savedState.players) {
+        const player = this.players.get(playerData.id);
+        if (player) {
+          player.status = this.convertStringToPlayerStatus(playerData.status);
+          player.chips = playerData.chips || 0;
+          player.currentBet = playerData.currentBet || 0;
+          player.totalBet = playerData.totalBet || 0;
+          player.hasActed = playerData.hasActed || false;
+          player.lastAction = playerData.lastAction;
+          // Note: Card restoration from string representation not implemented yet
+          // For now, keep existing cards or empty array
+          player.cards = player.cards || [];
+        }
+      }
+    }
+
+    // 重新初始化筹码池和位置管理器
+    // 由于没有状态恢复方法，我们需要重新设置这些管理器
+    this.potManager.reset();
+    if (savedState.players && savedState.players.length > 0) {
+      const activePlayers = savedState.players.map((p: any) => p.id);
+      this.positionManager.setPlayers(activePlayers);
+    }
+
+    // 设置当前玩家索引
+    const currentPlayerId = savedState.currentPlayerId;
+    if (currentPlayerId) {
+      const bettingOrder = this.phase === GamePhase.PRE_FLOP
+        ? this.positionManager.getPreflopBettingOrder()
+        : this.positionManager.getBettingOrder();
+      
+      this.currentPlayerIndex = bettingOrder.findIndex(id => id === currentPlayerId);
+      if (this.currentPlayerIndex === -1) {
+        this.currentPlayerIndex = 0;
+      }
+    }
+  }
+
+  /**
+   * 转换字符串到游戏阶段枚举
+   */
+  private convertStringToGamePhase(phaseStr: string): GamePhase {
+    switch (phaseStr) {
+      case 'waiting': return GamePhase.WAITING;
+      case 'pre_flop': case 'preflop': return GamePhase.PRE_FLOP;
+      case 'flop': return GamePhase.FLOP;
+      case 'turn': return GamePhase.TURN;
+      case 'river': return GamePhase.RIVER;
+      case 'showdown': return GamePhase.SHOWDOWN;
+      case 'finished': case 'ended': return GamePhase.FINISHED;
+      default: return GamePhase.WAITING;
+    }
+  }
+
+  /**
+   * 转换字符串到玩家状态枚举
+   */
+  private convertStringToPlayerStatus(statusStr: string): PlayerStatus {
+    switch (statusStr) {
+      case 'active': return PlayerStatus.ACTIVE;
+      case 'folded': return PlayerStatus.FOLDED;
+      case 'all_in': case 'allin': return PlayerStatus.ALL_IN;
+      case 'sitting_out': return PlayerStatus.SITTING_OUT;
+      default: return PlayerStatus.ACTIVE;
+    }
+  }
+
+  /**
    * 重置游戏到等待状态
    */
   reset(): void {

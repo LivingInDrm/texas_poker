@@ -492,17 +492,26 @@ function convertStringToPlayerAction(actionType: string): GamePlayerAction | nul
 
 // 重建游戏引擎状态
 function reconstructGameEngine(gameState: GameState): GameEngine {
-  const players = gameState.players.map(p => ({
-    id: p.id,
-    username: p.username,
-    chips: p.chips
-  }));
-
   const gameEngine = new GameEngine(gameState.gameId);
   
-  // 这里需要根据保存的状态重建游戏引擎
-  // 由于游戏引擎的复杂性，这是一个简化版本
-  // 实际应用中可能需要在GameEngine中添加状态恢复方法
+  // 添加玩家到游戏引擎
+  for (const player of gameState.players) {
+    gameEngine.addPlayer(player.id, player.username, player.chips);
+    gameEngine.setPlayerReady(player.id, true);
+  }
+
+  // 从保存的游戏状态恢复引擎状态
+  const engineSnapshot = gameEngine.getGameSnapshot();
+  const restoreData = {
+    phase: gameState.phase,
+    currentPlayerId: gameState.currentPlayerId,
+    players: gameState.players,
+    isHandInProgress: gameState.phase !== 'waiting',
+    handStartTime: Date.now(),
+    actionHistory: gameState.history || []
+  };
+  
+  gameEngine.restoreFromSnapshot(restoreData);
   
   return gameEngine;
 }
